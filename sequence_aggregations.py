@@ -41,7 +41,7 @@ class SimpleAttention(nn.Module):
     def __init__(self, dv):
         super().__init__()
         self.dv = dv
-        self.att_weights = nn.Parameter(Tensor(dv, 1)).cuda()  # 2d for initializer to work
+        self.att_weights = nn.Parameter(Tensor(dv, 1))  # 2d for initializer to work
         nn.init.xavier_uniform_(self.att_weights.data)
         self.scale_fac = np.power(dv, 0.5)
 
@@ -65,7 +65,7 @@ class NHeadDotProductAttention(nn.Module):
         super().__init__()
         self.n_heads = n_heads
         self.dv = dv
-        self.att_weights = nn.Parameter(Tensor(dv, n_heads)).cuda()  # 2d for initializer to work
+        self.att_weights = nn.Parameter(Tensor(dv, n_heads))  # 2d for initializer to work
         nn.init.xavier_uniform_(self.att_weights.data)
         self.scale_fac = np.power(dv, 0.5)
 
