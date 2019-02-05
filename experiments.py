@@ -128,3 +128,19 @@ class FactChecking(ExperimentCls):
         trn_df = trn_df_full.iloc[split[0]]
         val_df = trn_df_full.iloc[split[1]]
         return trn_df, val_df, tst_df
+
+
+@dataclass
+class Imdb(ExperimentCls):
+    num_cv_splits: int = 5
+    cv_random_state: int = 17
+
+    def get_dfs(self, fold_num: int = 0):
+        trn_df_full = pd.read_csv(os.path.join(self.dataset_path, 'train.csv'))
+        tst_df = pd.read_csv(os.path.join(self.dataset_path, 'test.csv'))
+
+        kf = KFold(self.num_cv_splits, True, random_state=self.cv_random_state)
+        split = list(kf.split(trn_df_full))[fold_num]
+        trn_df = trn_df_full.iloc[split[0]]
+        val_df = trn_df_full.iloc[split[1]]
+        return trn_df, val_df, tst_df
