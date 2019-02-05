@@ -44,6 +44,7 @@ class SimpleAttention(nn.Module):
         self.att_weights = nn.Parameter(Tensor(dv, 1))  # 2d for initializer to work
         nn.init.xavier_uniform_(self.att_weights.data)
         self.scale_fac = np.power(dv, 0.5)
+        self.att_scores = None
 
     def forward(self, inp):
         bs = inp.shape[0]
@@ -53,6 +54,7 @@ class SimpleAttention(nn.Module):
         attns = weights.softmax(1)
         weighted = inp * attns.unsqueeze(-1).expand_as(inp)  # bs x seq_len x dv
         result = weighted.sum(1)
+        self.att_scores = attns
         return result
 
     @property
@@ -68,15 +70,17 @@ class NHeadDotProductAttention(nn.Module):
         self.att_weights = nn.Parameter(Tensor(dv, n_heads))  # 2d for initializer to work
         nn.init.xavier_uniform_(self.att_weights.data)
         self.scale_fac = np.power(dv, 0.5)
+        self.att_scores = None
 
     def forward(self, inp):
         bs = inp.shape[0]
-        weights = torch.bmm(inp, self.att_weights.expand(bs, -1, -1)).squeeze()  # would repeat () be faster?
+        weights = torch.bmm(inp, self.att_weights.expand(bs, -1, -1))  # would repeat () be faster?
         weights /= self.scale_fac  # improves results a little
         attns = weights.relu_().softmax(1)  # lack of RELU breaks stuff
         weighted = inp.unsqueeze(-1).expand(-1, -1, -1, self.n_heads) * \
-                   attns.unsqueeze(-2).expand(-1, -1, self.dv, -1)  # bs x seq_len x dv x n_heads
+                   attns.unsqueeze(-2).expand(bs, -1, self.dv, -1)  # bs x seq_len x dv x n_heads
         result = weighted.sum(1).view(bs, -1)
+        self.att_scores = attns
         return result
 
     @property
