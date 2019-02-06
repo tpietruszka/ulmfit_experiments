@@ -70,7 +70,6 @@ class NHeadDotProductAttention(nn.Module):
         self.att_weights = nn.Parameter(Tensor(dv, n_heads))  # 2d for initializer to work
         nn.init.xavier_uniform_(self.att_weights.data)
         self.scale_fac = np.power(dv, 0.5)
-        self.att_scores = None
 
     def forward(self, inp):
         bs = inp.shape[0]
@@ -80,7 +79,6 @@ class NHeadDotProductAttention(nn.Module):
         weighted = inp.unsqueeze(-1).expand(-1, -1, -1, self.n_heads) * \
                    attns.unsqueeze(-2).expand(bs, -1, self.dv, -1)  # bs x seq_len x dv x n_heads
         result = weighted.sum(1).view(bs, -1)
-        self.att_scores = attns
         return result
 
     @property
