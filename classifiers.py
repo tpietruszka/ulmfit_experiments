@@ -22,3 +22,33 @@ class SequenceAggregatingClassifier(nn.Module):
         x = self.layers(x)
         return x, raw_outputs, outputs
 
+
+class BidirEncoder(nn.Module):
+    def __init__(self, enc1, enc2):
+        super().__init__()
+        self.enc1 = enc1
+        self.enc2 = enc2
+
+    def forward(self, input: LongTensor) -> Tuple[LongTensor, LongTensor]:
+        e1 = self.enc1(input)
+        e2 = self.enc2(input.flip(1))
+
+        raw = [torch.cat([x1, x2.flip(1)], 2) for x1, x2 in zip(e1[0], e2[0])]
+        out = [torch.cat([x1, x2.flip(1)], 2) for x1, x2 in zip(e1[1], e2[1])]
+        return raw, out
+
+    def reset(self):
+        self.enc1.reset()
+        self.enc2.reset()
+
+
+def bidir_rnn_classifier_split(model: nn.Module) -> List[nn.Module]:
+    "Split a RNN `model` in groups for differential learning rates."
+    enc_groups = []
+    for enc in [model[0].enc1, model[0].enc2]:
+        g1 = [[enc.encoder, enc.encoder_dp]]
+        g1 += [[rnn, dp] for rnn, dp in zip(enc.rnns, enc.hidden_dps)]
+        enc_groups.append(g1)
+    groups = [sum(gr, []) for gr in zip(*enc_groups)]
+    groups.append([model[1]])
+    return groups

@@ -1,6 +1,4 @@
 from dataclasses import dataclass
-import os
-from fastai import *
 from fastai.text import *
 from fastai.callbacks import CSVLogger, SaveModelCallback
 from sacremoses import MosesTokenizer
@@ -104,6 +102,25 @@ class ExperimentCls:
         classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps)
         model = SequentialRNN(rnn_enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=rnn_classifier_split, true_wd=self.true_wd)
+        learn.callback_fns += [partial(CSVLogger, filename=f"{learn.model_dir}/cls-history"),
+                               partial(SaveModelCallback, every='improvement', name='cls_best')]
+        return learn
+
+    def get_bidir_learner(self, data_bunch: DataBunch,
+                          agg_model: sequence_aggregations.Aggregation) -> 'TextClassifierLearner':
+        assert not self.backwards
+        encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
+        num_classes = data_bunch.c
+        vocab_size = len(data_bunch.vocab.itos)
+        lin_ftrs = list(self.lin_ftrs) + [num_classes]
+        enc_parts = [MultiBatchRNNCore(self.bptt, self.max_len, vocab_size, self.emb_sz, self.nh, self.nl,
+                                       pad_token=PAD_TOKEN_ID, input_p=encoder_dps[0], weight_p=encoder_dps[1],
+                                       embed_p=encoder_dps[2], hidden_p=encoder_dps[3]) for _ in range(2)]
+        enc = classifiers.BidirEncoder(*enc_parts)
+        classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps)
+        model = SequentialRNN(enc, classifier)
+        learn = RNNLearner(data_bunch, model, self.bptt, split_func=classifiers.bidir_rnn_classifier_split,
+                           true_wd=self.true_wd)
         learn.callback_fns += [partial(CSVLogger, filename=f"{learn.model_dir}/cls-history"),
                                partial(SaveModelCallback, every='improvement', name='cls_best')]
         return learn
