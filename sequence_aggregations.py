@@ -10,7 +10,7 @@ class Aggregation(nn.Module, metaclass=abc.ABCMeta):
         pass
 
     @abc.abstractmethod
-    def output_dir(self) -> int:
+    def output_dim(self) -> int:
         """Should return the dimension of the returned hidden state (per-sample dimension)"""
         pass
 
