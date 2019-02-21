@@ -208,6 +208,7 @@ class ExperimentCls(metaclass=ABCMeta):
             preds = learn.get_preds(DatasetType.Test, ordered=True)
             test_score = accuracy(preds[0], Tensor(dfs[-1][self.label_col]).long()).item()
             results['test_score'] = test_score
+        results['best_val_acc'] = max([ep['accuracy'] for phase in results['phase_stats'] for ep in phase])
         return results, learn
 
 
