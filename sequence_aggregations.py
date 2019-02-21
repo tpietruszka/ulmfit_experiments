@@ -3,8 +3,17 @@ from fastai.text import *
 import torch
 import abc
 
+registry = {}
 
-class Aggregation(nn.Module, metaclass=abc.ABCMeta):
+
+class RegisteredAbstractMeta(abc.ABCMeta):
+    def __new__(mcs, name, bases, class_dct):
+        x = super().__new__(mcs, name, bases, class_dct)
+        registry[x.__name__] = x
+        return x
+
+
+class Aggregation(nn.Module, metaclass=RegisteredAbstractMeta):
     @abc.abstractmethod
     def forward(self, inp: torch.Tensor) -> torch.Tensor:
         pass
@@ -14,9 +23,14 @@ class Aggregation(nn.Module, metaclass=abc.ABCMeta):
         """Should return the dimension of the returned hidden state (per-sample dimension)"""
         pass
 
+    @staticmethod
+    def factory(name: str, params: Dict) -> 'Aggregation':
+        return registry[name](**params)
 
-class Baseline(nn.Module):
+
+class Baseline(Aggregation):
     "Create a linear classifier with pooling."
+
     def __init__(self, dv):
         super().__init__()
         self.dv = dv
@@ -37,7 +51,7 @@ class Baseline(nn.Module):
         return 3 * self.dv
 
 
-class SimpleAttention(nn.Module):
+class SimpleAttention(Aggregation):
     def __init__(self, dv):
         super().__init__()
         self.dv = dv
@@ -62,7 +76,7 @@ class SimpleAttention(nn.Module):
         return self.dv
 
 
-class NHeadDotProductAttention(nn.Module):
+class NHeadDotProductAttention(Aggregation):
     def __init__(self, n_heads, dv):
         super().__init__()
         self.n_heads = n_heads

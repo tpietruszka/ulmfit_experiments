@@ -33,13 +33,52 @@ class MosesTokenizerFunc(BaseTokenizer):
 
 
 @dataclass
+class Fit1CycleParams:
+    """
+    This class should be used like:
+    ```
+        params = Fit1CycleParams(-1, 1)
+        learn.freeze_to(params.freeze_to)
+        learn.fit_one_cycle(**params.to_dict())
+    ```
+    """
+    freeze_to: int
+    cyc_len: int
+    # max learning rates - arguments to slice() passed to fit_one_cycle(). Max lrs for the first and last layers
+    lr_max_first: float = 1e-3 / (2.6 ** 4)
+    lr_max_last: float = 1e-3
+    moms: (float, float) = (0.8, 0.7)
+    div_factor: float = 25.0
+    pct_start: float = 0.3
+
+    def keys(self):
+        return ['cyc_len', 'max_lr', 'moms', 'div_factor', 'pct_start']
+
+    def __getitem__(self, item):
+        if item == 'max_lr':
+            return slice(self.lr_max_first, self.lr_max_last)
+        return getattr(self, item)
+
+    def to_dict(self):
+        return {k: self[k] for k in self.keys()}
+
+
+@dataclass
 class ExperimentCls:
     dataset_path: str  # data_dir
     vocab_path: str
-    bs: int
-    mark_fields: bool = False
-    base_lm_path: str = None
+    fwd_enc_path: str  # without file extension
+    bwd_enc_path: Optional[str]
+
+    training_phases: List[Fit1CycleParams]
+    aggregation_class: str
+    aggregation_params: Dict
+
     backwards: str = False
+    bidir: bool = False
+
+    bs: int = 40
+    mark_fields: bool = False
     max_vocab: int = 60000
 
     # preprocessing
@@ -50,7 +89,6 @@ class ExperimentCls:
     label_cols: IntsOrStrs = 0
 
     # model params
-
     emb_sz: int = 400
     nh: int = 1150
     nl: int = 3
@@ -58,8 +96,7 @@ class ExperimentCls:
     max_len: int = 70 * 20
     # these hyperparameters are for training on ~100M tokens (e.g. WikiText-103)
     # for training on smaller datasets, more dropout is necessary
-    encoder_dps: Sequence[float] = tuple(default_dropout['classifier'][
-                                         :-1])  # TODO: replace with fastai classifier defaults. Originally first 4 for the encoder, last for decoder
+    encoder_dps: Sequence[float] = tuple(default_dropout['classifier'][:-1])
     classifier_dps: Sequence[float] = (0.4, 0.1)
     lin_ftrs = (50,)
     drop_mult: float = 1.  # main switch to proportionally rescale dps
@@ -69,6 +106,10 @@ class ExperimentCls:
     # alpha and beta - defaults like in fastai/text/learner.py:RNNLearner()
     rnn_alpha: float = 2  # activation regularization (AR)
     rnn_beta: float = 1  # temporal activation regularization (TAR)
+
+    cv_num_splits: int = 5
+    cv_random_state: int = 17
+    cv_fold_num: int = 0
 
     @property
     def cache_dir(self):
@@ -125,6 +166,42 @@ class ExperimentCls:
                                partial(SaveModelCallback, every='improvement', name='cls_best')]
         return learn
 
+    def run(self):
+        dfs = self.get_dfs(self.cv_fold_num)
+        data_cls = self.get_data_bunch(*dfs)
+
+        agg_inp_size = self.emb_sz if not self.bidir else 2 * self.emb_sz
+        agg_params = dict(dv=agg_inp_size, **self.aggregation_params)
+        agg = sequence_aggregations.Aggregation.factory(self.aggregation_class, agg_params)
+        if self.bidir:
+            learn = self.get_bidir_learner(data_cls, agg)
+            learn.model[0].enc1.load_state_dict(torch.load(self.fwd_enc_path + '.pth'))
+            learn.model[0].enc2.load_state_dict(torch.load(self.bwd_enc_path + '.pth'))
+        else:
+            learn = self.get_learner(data_cls, agg)
+            if self.backwards:
+                learn.load_encoder(self.bwd_enc_path)
+            else:
+                learn.load_encoder(self.fwd_enc_path)
+
+        phase_stats = []
+        for phase in self.training_phases:
+            learn.freeze_to(phase.freeze_to)
+            learn.fit_one_cycle(**phase.to_dict())
+            stats = {
+                'train_losses': [x.item() for x in learn.recorder.losses],
+                'val_losses': [x.item() for x in learn.recorder.val_losses],
+                'metrics': [[m.item() for m in epoch] for epoch in learn.recorder.metrics]
+            }
+            phase_stats.append(stats)
+        preds = learn.get_preds(DatasetType.Test, ordered=True)
+        test_score = accuracy(preds[0], Tensor(dfs[-1][0]).long()).item()
+        results = {
+            'phase_stats': phase_stats,
+            'test_score': test_score
+        }
+        return results
+
 
 @dataclass
 class FactChecking(ExperimentCls):
@@ -133,14 +210,11 @@ class FactChecking(ExperimentCls):
     text_cols: IntsOrStrs = ('category', 'subject', 'body')
     label_cols: IntsOrStrs = ('fact_label',)
 
-    num_cv_splits: int = 5
-    cv_random_state: int = 17
-
     def get_dfs(self, fold_num: int = 0):
         trn_df_full = pd.read_csv(os.path.join(self.dataset_path, 'train.csv'))
         tst_df = pd.read_csv(os.path.join(self.dataset_path, 'test.csv'))
 
-        kf = KFold(self.num_cv_splits, True, random_state=self.cv_random_state)
+        kf = KFold(self.cv_num_splits, True, random_state=self.cv_random_state)
         split = list(kf.split(trn_df_full))[fold_num]
         trn_df = trn_df_full.iloc[split[0]]
         val_df = trn_df_full.iloc[split[1]]
@@ -149,14 +223,12 @@ class FactChecking(ExperimentCls):
 
 @dataclass
 class Imdb(ExperimentCls):
-    num_cv_splits: int = 5
-    cv_random_state: int = 17
 
     def get_dfs(self, fold_num: int = 0):
-        trn_df_full = pd.read_csv(os.path.join(self.dataset_path, 'train.csv'))
-        tst_df = pd.read_csv(os.path.join(self.dataset_path, 'test.csv'))
+        trn_df_full = pd.read_csv(os.path.join(self.dataset_path, 'train.csv'), header=None)
+        tst_df = pd.read_csv(os.path.join(self.dataset_path, 'test.csv'), header=None)
 
-        kf = KFold(self.num_cv_splits, True, random_state=self.cv_random_state)
+        kf = KFold(self.cv_num_splits, True, random_state=self.cv_random_state)
         split = list(kf.split(trn_df_full))[fold_num]
         trn_df = trn_df_full.iloc[split[0]]
         val_df = trn_df_full.iloc[split[1]]
