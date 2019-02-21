@@ -1,10 +1,12 @@
 from dataclasses import dataclass
 from fastai.text import *
-from fastai.callbacks import CSVLogger, SaveModelCallback
+from fastai.callbacks import SaveModelCallback
 from sacremoses import MosesTokenizer
 from sklearn.model_selection import KFold
 from . import sequence_aggregations
 from . import classifiers
+from .utils import StatsRecorder
+from abc import ABCMeta, abstractmethod
 
 URL_TOKEN = 'xxurl'
 PAD_TOKEN_ID = 1
@@ -64,13 +66,13 @@ class Fit1CycleParams:
 
 
 @dataclass
-class ExperimentCls:
+class ExperimentCls(metaclass=ABCMeta):
     dataset_path: str  # data_dir
     vocab_path: str
     fwd_enc_path: str  # without file extension
     bwd_enc_path: Optional[str]
 
-    training_phases: List[Fit1CycleParams]
+    training_phases: List[Dict]  # arguments to Fi1CycleParams()
     aggregation_class: str
     aggregation_params: Dict
 
@@ -86,7 +88,7 @@ class ExperimentCls:
     pre_rules: Collection[Callable[[str], str]] = tuple(defaults.text_pre_rules)
     post_rules: Collection[Callable[[str], str]] = tuple(defaults.text_post_rules)
     text_cols: IntsOrStrs = 1
-    label_cols: IntsOrStrs = 0
+    label_col: IntsOrStrs = 0
 
     # model params
     emb_sz: int = 400
@@ -111,6 +113,12 @@ class ExperimentCls:
     cv_random_state: int = 17
     cv_fold_num: int = 0
 
+    calc_test_score: bool = False
+
+    @abstractmethod
+    def get_dfs(self, fold_num: int) -> [DataFrame, DataFrame, DataFrame]:
+        pass
+
     @property
     def cache_dir(self):
         return os.path.join(self.dataset_path, 'models', 'cls_cache')
@@ -126,13 +134,13 @@ class ExperimentCls:
         data_cls = TextClasDataBunch.from_df(path=self.cache_dir, train_df=trn_df, valid_df=val_df,
                                              test_df=tst_df, max_vocab=self.max_vocab, bs=self.bs,
                                              backwards=self.backwards, text_cols=self.text_cols,
-                                             label_cols=self.label_cols, mark_fields=self.mark_fields, **args)
+                                             label_cols=self.label_col, mark_fields=self.mark_fields, **args)
         print('Size of vocabulary:', len(data_cls.vocab.itos))
         print('First 20 words in vocab:', data_cls.vocab.itos[:20])
         return data_cls
 
     def get_learner(self, data_bunch: DataBunch,
-                    agg_model: sequence_aggregations.Aggregation) -> 'TextClassifierLearner':
+                    agg_model: sequence_aggregations.Aggregation) -> 'RNNLearner':
         encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
         num_classes = data_bunch.c
         vocab_size = len(data_bunch.vocab.itos)
@@ -143,12 +151,12 @@ class ExperimentCls:
         classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps)
         model = SequentialRNN(rnn_enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=rnn_classifier_split, true_wd=self.true_wd)
-        learn.callback_fns += [partial(CSVLogger, filename=f"{learn.model_dir}/cls-history"),
+        learn.callback_fns += [StatsRecorder,
                                partial(SaveModelCallback, every='improvement', name='cls_best')]
         return learn
 
     def get_bidir_learner(self, data_bunch: DataBunch,
-                          agg_model: sequence_aggregations.Aggregation) -> 'TextClassifierLearner':
+                          agg_model: sequence_aggregations.Aggregation) -> 'RNNLearner':
         assert not self.backwards
         encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
         num_classes = data_bunch.c
@@ -162,11 +170,11 @@ class ExperimentCls:
         model = SequentialRNN(enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=classifiers.bidir_rnn_classifier_split,
                            true_wd=self.true_wd)
-        learn.callback_fns += [partial(CSVLogger, filename=f"{learn.model_dir}/cls-history"),
+        learn.callback_fns += [StatsRecorder,
                                partial(SaveModelCallback, every='improvement', name='cls_best')]
         return learn
 
-    def run(self):
+    def run(self) -> Tuple[Dict, 'RNNLearner']:
         dfs = self.get_dfs(self.cv_fold_num)
         data_cls = self.get_data_bunch(*dfs)
 
@@ -184,23 +192,23 @@ class ExperimentCls:
             else:
                 learn.load_encoder(self.fwd_enc_path)
 
-        phase_stats = []
-        for phase in self.training_phases:
+        results = {
+            'phase_stats': [],
+            'train_losses': []
+        }
+
+        for phase_params in self.training_phases:
+            phase = Fit1CycleParams(**phase_params)
             learn.freeze_to(phase.freeze_to)
             learn.fit_one_cycle(**phase.to_dict())
-            stats = {
-                'train_losses': [x.item() for x in learn.recorder.losses],
-                'val_losses': [x.item() for x in learn.recorder.val_losses],
-                'metrics': [[m.item() for m in epoch] for epoch in learn.recorder.metrics]
-            }
-            phase_stats.append(stats)
-        preds = learn.get_preds(DatasetType.Test, ordered=True)
-        test_score = accuracy(preds[0], Tensor(dfs[-1][0]).long()).item()
-        results = {
-            'phase_stats': phase_stats,
-            'test_score': test_score
-        }
-        return results
+            results['phase_stats'].append(copy(learn.stats_recorder.stats))
+            results['train_losses'].append([l.item() for l in learn.recorder.losses])
+
+        if self.calc_test_score:
+            preds = learn.get_preds(DatasetType.Test, ordered=True)
+            test_score = accuracy(preds[0], Tensor(dfs[-1][self.label_col]).long()).item()
+            results['test_score'] = test_score
+        return results, learn
 
 
 @dataclass
@@ -208,7 +216,7 @@ class FactChecking(ExperimentCls):
     mark_fields: bool = True
     pre_rules: Collection[Callable[[str], str]] = tuple([remove_urls] + defaults.text_pre_rules)
     text_cols: IntsOrStrs = ('category', 'subject', 'body')
-    label_cols: IntsOrStrs = ('fact_label',)
+    label_col: IntsOrStrs = 'fact_label'
 
     def get_dfs(self, fold_num: int = 0):
         trn_df_full = pd.read_csv(os.path.join(self.dataset_path, 'train.csv'))
@@ -223,6 +231,7 @@ class FactChecking(ExperimentCls):
 
 @dataclass
 class Imdb(ExperimentCls):
+    cv_num_splits = 10
 
     def get_dfs(self, fold_num: int = 0):
         trn_df_full = pd.read_csv(os.path.join(self.dataset_path, 'train.csv'), header=None)
