@@ -2,18 +2,10 @@ from fastai import *
 from fastai.text import *
 import torch
 import abc
-
-registry = {}
-
-
-class RegisteredAbstractMeta(abc.ABCMeta):
-    def __new__(mcs, name, bases, class_dct):
-        x = super().__new__(mcs, name, bases, class_dct)
-        registry[x.__name__] = x
-        return x
+from .utils import RegisteredAbstractMeta
 
 
-class Aggregation(nn.Module, metaclass=RegisteredAbstractMeta):
+class Aggregation(nn.Module, metaclass=RegisteredAbstractMeta, is_registry=True):
     @abc.abstractmethod
     def forward(self, inp: torch.Tensor) -> torch.Tensor:
         pass
@@ -23,9 +15,9 @@ class Aggregation(nn.Module, metaclass=RegisteredAbstractMeta):
         """Should return the dimension of the returned hidden state (per-sample dimension)"""
         pass
 
-    @staticmethod
-    def factory(name: str, params: Dict) -> 'Aggregation':
-        return registry[name](**params)
+    @classmethod
+    def factory(cls, name: str, params: Dict) -> 'Aggregation':
+        return cls.subclass_registry[name](**params)
 
 
 class Baseline(Aggregation):

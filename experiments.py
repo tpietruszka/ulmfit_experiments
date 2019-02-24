@@ -5,7 +5,7 @@ from sacremoses import MosesTokenizer
 from sklearn.model_selection import KFold
 from . import sequence_aggregations
 from . import classifiers
-from .utils import StatsRecorder
+from .utils import StatsRecorder, RegisteredAbstractMeta
 from abc import ABCMeta, abstractmethod
 
 URL_TOKEN = 'xxurl'
@@ -66,7 +66,7 @@ class Fit1CycleParams:
 
 
 @dataclass
-class ExperimentCls(metaclass=ABCMeta):
+class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     dataset_path: str  # data_dir
     vocab_path: str
     fwd_enc_path: str  # without file extension
@@ -114,6 +114,10 @@ class ExperimentCls(metaclass=ABCMeta):
     cv_fold_num: int = 0
 
     calc_test_score: bool = False
+
+    @classmethod
+    def factory(cls, name: str, params: Dict) -> 'ExperimentCls':
+        return cls.subclass_registry[name](**params)
 
     @abstractmethod
     def get_dfs(self, fold_num: int) -> [DataFrame, DataFrame, DataFrame]:
