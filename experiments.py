@@ -11,6 +11,8 @@ from abc import ABCMeta, abstractmethod
 URL_TOKEN = 'xxurl'
 PAD_TOKEN_ID = 1
 
+CLS_BEST_FILE = 'cls_best'
+
 
 def remove_urls(t: str) -> str:
     return re.sub(r'http\S+', URL_TOKEN, t)
@@ -46,9 +48,8 @@ class Fit1CycleParams:
     """
     freeze_to: int
     cyc_len: int
-    # max learning rates - arguments to slice() passed to fit_one_cycle(). Max lrs for the first and last layers
-    lr_max_first: float = 1e-3 / (2.6 ** 4)
     lr_max_last: float = 1e-3
+    lr_last_to_first_ratio: float = (2.6 ** 4)  # lr_max_first == lr_max_last / lr_last_to_first_ratio
     moms: (float, float) = (0.8, 0.7)
     div_factor: float = 25.0
     pct_start: float = 0.3
@@ -58,7 +59,7 @@ class Fit1CycleParams:
 
     def __getitem__(self, item):
         if item == 'max_lr':
-            return slice(self.lr_max_first, self.lr_max_last)
+            return slice(self.lr_max_last / self.lr_last_to_first_ratio, self.lr_max_last)
         return getattr(self, item)
 
     def to_dict(self):
@@ -68,9 +69,7 @@ class Fit1CycleParams:
 @dataclass
 class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     dataset_path: str  # data_dir
-    vocab_path: str
-    fwd_enc_path: str  # without file extension
-    bwd_enc_path: Optional[str]
+    encoder_subdir: str  # directory inside of 'dataset_path' containing vocab, fwd and optionally bwd encoders
 
     training_phases: List[Dict]  # arguments to Fi1CycleParams()
     aggregation_class: str
@@ -127,6 +126,18 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     def cache_dir(self):
         return os.path.join(self.dataset_path, 'models', 'cls_cache')
 
+    @property
+    def vocab_path(self) -> str:
+        return os.path.join(self.dataset_path, self.encoder_subdir, 'itos.pkl')
+
+    @property
+    def fwd_enc_path(self) -> str:
+        return os.path.join(self.dataset_path, self.encoder_subdir, 'fwd_enc')
+
+    @property
+    def bwd_enc_path(self) -> str:
+        return os.path.join(self.dataset_path, self.encoder_subdir, 'bwd_enc')
+
     def get_data_bunch(self, trn_df, val_df, tst_df) -> DataBunch:
         args = dict(tokenizer=Tokenizer(tok_func=MosesTokenizerFunc, lang=self.lang, pre_rules=self.pre_rules,
                                         post_rules=self.post_rules))
@@ -156,7 +167,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         model = SequentialRNN(rnn_enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=rnn_classifier_split, true_wd=self.true_wd)
         learn.callback_fns += [StatsRecorder,
-                               partial(SaveModelCallback, every='improvement', name='cls_best')]
+                               partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
         return learn
 
     def get_bidir_learner(self, data_bunch: DataBunch,
@@ -175,7 +186,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=classifiers.bidir_rnn_classifier_split,
                            true_wd=self.true_wd)
         learn.callback_fns += [StatsRecorder,
-                               partial(SaveModelCallback, every='improvement', name='cls_best')]
+                               partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
         return learn
 
     def run(self) -> Tuple[Dict, 'RNNLearner']:
@@ -218,6 +229,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
 
 @dataclass
 class FactChecking(ExperimentCls):
+    drop_mult = 1.
     mark_fields: bool = True
     pre_rules: Collection[Callable[[str], str]] = tuple([remove_urls] + defaults.text_pre_rules)
     text_cols: IntsOrStrs = ('category', 'subject', 'body')
@@ -237,6 +249,7 @@ class FactChecking(ExperimentCls):
 @dataclass
 class Imdb(ExperimentCls):
     cv_num_splits = 10
+    drop_mult = 0.5
 
     def get_dfs(self, fold_num: int = 0):
         trn_df_full = pd.read_csv(os.path.join(self.dataset_path, 'train.csv'), header=None)
