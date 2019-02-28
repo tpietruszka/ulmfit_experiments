@@ -95,6 +95,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     nl: int = 3
     bptt: int = 70
     max_len: int = 70 * 20
+    rnn_output_layers: List[int] = (-1,)
     # these hyperparameters are for training on ~100M tokens (e.g. WikiText-103)
     # for training on smaller datasets, more dropout is necessary
     encoder_dps: Sequence[float] = tuple(default_dropout['classifier'][:-1])
@@ -113,6 +114,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     cv_fold_num: int = 0
 
     calc_test_score: bool = False
+    train_set_fraction: float = 1.
 
     @classmethod
     def factory(cls, name: str, params: Dict) -> 'ExperimentCls':
@@ -163,7 +165,8 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         rnn_enc = MultiBatchRNNCore(self.bptt, self.max_len, vocab_size, self.emb_sz, self.nh, self.nl,
                                     pad_token=PAD_TOKEN_ID, input_p=encoder_dps[0], weight_p=encoder_dps[1],
                                     embed_p=encoder_dps[2], hidden_p=encoder_dps[3])
-        classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps)
+        classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps,
+                                                               self.rnn_output_layers)
         model = SequentialRNN(rnn_enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=rnn_classifier_split, true_wd=self.true_wd)
         learn.callback_fns += [StatsRecorder,
@@ -181,7 +184,8 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
                                        pad_token=PAD_TOKEN_ID, input_p=encoder_dps[0], weight_p=encoder_dps[1],
                                        embed_p=encoder_dps[2], hidden_p=encoder_dps[3]) for _ in range(2)]
         enc = classifiers.BidirEncoder(*enc_parts)
-        classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps)
+        classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps,
+                                                               self.rnn_output_layers)
         model = SequentialRNN(enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=classifiers.bidir_rnn_classifier_split,
                            true_wd=self.true_wd)
@@ -190,10 +194,21 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         return learn
 
     def run(self) -> Tuple[Dict, 'RNNLearner']:
-        dfs = self.get_dfs(self.cv_fold_num)
-        data_cls = self.get_data_bunch(*dfs)
+        trn_df, val_df, tst_df = self.get_dfs(self.cv_fold_num)
+        if self.train_set_fraction < 1:
+            num_samples = int(len(trn_df) * self.train_set_fraction)
+            trn_df = trn_df.iloc[:num_samples]
+        data_cls = self.get_data_bunch(trn_df, val_df, tst_df)
 
-        agg_inp_size = self.emb_sz if not self.bidir else 2 * self.emb_sz
+        agg_inp_size = 0
+        for lnum in self.rnn_output_layers:
+            if lnum == -1 or lnum == (self.nl-1):
+                agg_inp_size += self.emb_sz
+            else:
+                agg_inp_size += self.nh
+        if self.bidir:
+            agg_inp_size *= 2
+
         agg_params = dict(dv=agg_inp_size, **self.aggregation_params)
         agg = sequence_aggregations.Aggregation.factory(self.aggregation_class, agg_params)
         if self.bidir:
@@ -218,10 +233,13 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
             learn.fit_one_cycle(**phase.to_dict())
             results['phase_stats'].append(copy(learn.stats_recorder.stats))
             results['train_losses'].append([l.item() for l in learn.recorder.losses])
-
         if self.calc_test_score:
+            data_cls.train_dl = None
+            data_cls.valid_dl = None
+            gc.collect()
+            torch.cuda.empty_cache()
             preds = learn.get_preds(DatasetType.Test, ordered=True)
-            test_score = accuracy(preds[0], Tensor(dfs[-1][self.label_col]).long()).item()
+            test_score = accuracy(preds[0], Tensor(tst_df[self.label_col]).long()).item()
             results['test_score'] = test_score
         results['best_val_acc'] = max([ep['accuracy'] for phase in results['phase_stats'] for ep in phase])
         return results, learn
@@ -254,7 +272,6 @@ class Imdb(ExperimentCls):
     def get_dfs(self, fold_num: int = 0):
         trn_df_full = pd.read_csv(os.path.join(self.dataset_path, 'train.csv'), header=None)
         tst_df = pd.read_csv(os.path.join(self.dataset_path, 'test.csv'), header=None)
-
         kf = KFold(self.cv_num_splits, True, random_state=self.cv_random_state)
         split = list(kf.split(trn_df_full))[fold_num]
         trn_df = trn_df_full.iloc[split[0]]

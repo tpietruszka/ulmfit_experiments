@@ -68,6 +68,20 @@ class SimpleAttention(Aggregation):
         return self.dv
 
 
+class SimpleDropConnectAttention(Aggregation):
+    def __init__(self, dv, p_drop):
+        super().__init__()
+        self.att = SimpleAttention(dv)
+        self.wrapped_att = WeightDropout(self.att, p_drop, ['att_weights'])
+
+    def forward(self, *args, **kwargs):
+        return self.wrapped_att(*args, **kwargs)
+
+    @property
+    def output_dim(self):
+        return self.att.output_dim
+
+
 class NHeadDotProductAttention(Aggregation):
     def __init__(self, n_heads, dv):
         super().__init__()
@@ -90,3 +104,52 @@ class NHeadDotProductAttention(Aggregation):
     @property
     def output_dim(self) -> int:
         return self.dv * self.n_heads
+
+
+class MultiLayerPointwise(nn.Module):
+    """Applies a point-wise neural network, with ReLU activations between layers and none at the end"""
+
+    def __init__(self, dims: Sequence[int], dropouts: Union[Sequence[float], float] = 0., batchnorm: bool = True):
+        super().__init__()
+        acts = [nn.ReLU(inplace=True)] * (len(dims) - 2) + [None]
+        layers = []
+        if not isinstance(dropouts, Sequence):
+            dropouts = [dropouts] * (len(dims) - 1)
+        for din, dout, act, drop in zip(dims[:-1], dims[1:], acts, dropouts):
+            layers += bn_drop_lin(din, dout, bn=batchnorm, p=drop, actn=act)
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, inp):
+        bs, sl, dv = inp.shape
+        x = inp.view(bs * sl, -1)
+        x = self.layers(x)
+        x = x.view(bs, sl, -1)
+        return x
+
+
+class BranchingAttentionAggregation(Aggregation):
+    def __init__(self, dv: int, att_hid_layers: Sequence[int], att_dropouts: Sequence[float],
+                 agg_dim: Optional[int] = None):
+        super().__init__()
+        att_layers = [dv] + list(att_hid_layers) + [1]
+        self.head = MultiLayerPointwise(att_layers, att_dropouts, batchnorm=False)
+        self.agg_dim = agg_dim
+        if agg_dim:
+            self.agg = MultiLayerPointwise([dv, agg_dim], 0, batchnorm=False)
+        self.dv = dv
+        self.last_weights = None
+
+    @property
+    def output_dim(self):
+        return self.agg_dim or self.dv
+
+    def forward(self, inp):
+        weights = F.softmax(self.head(inp).squeeze(), dim=1)
+        self.last_weights = weights
+        if self.agg_dim:
+            to_agg = self.agg(inp)
+        else:
+            to_agg = inp
+        weighted = to_agg * weights.unsqueeze(-1).expand_as(to_agg)
+        res = weighted.sum(1)
+        return res
