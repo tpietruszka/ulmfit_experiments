@@ -13,6 +13,8 @@ PAD_TOKEN_ID = 1
 
 CLS_BEST_FILE = 'cls_best'
 
+metrics_registry = {'accuracy': accuracy, 'f1': FBeta(beta=1)}
+
 
 def remove_urls(t: str) -> str:
     return re.sub(r'http\S+', URL_TOKEN, t)
@@ -116,6 +118,8 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     calc_test_score: bool = False
     train_set_fraction: float = 1.
 
+    metrics: Sequence[str] = ('accuracy',)
+
     @classmethod
     def factory(cls, name: str, params: Dict) -> 'ExperimentCls':
         return cls.subclass_registry[name](**params)
@@ -157,7 +161,8 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         return data_cls
 
     def get_learner(self, data_bunch: DataBunch,
-                    agg_model: sequence_aggregations.Aggregation) -> 'RNNLearner':
+                    agg_model: sequence_aggregations.Aggregation,
+                    metrics: Optional[MetricFuncList] = None) -> 'RNNLearner':
         encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
         num_classes = data_bunch.c
         vocab_size = len(data_bunch.vocab.itos)
@@ -168,13 +173,15 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps,
                                                                self.rnn_output_layers)
         model = SequentialRNN(rnn_enc, classifier)
-        learn = RNNLearner(data_bunch, model, self.bptt, split_func=rnn_classifier_split, true_wd=self.true_wd)
+        learn = RNNLearner(data_bunch, model, self.bptt, split_func=rnn_classifier_split, true_wd=self.true_wd,
+                           metrics=metrics)
         learn.callback_fns += [StatsRecorder,
                                partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
         return learn
 
     def get_bidir_learner(self, data_bunch: DataBunch,
-                          agg_model: sequence_aggregations.Aggregation) -> 'RNNLearner':
+                          agg_model: sequence_aggregations.Aggregation,
+                          metrics: Optional[MetricFuncList] = None) -> 'RNNLearner':
         assert not self.backwards
         encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
         num_classes = data_bunch.c
@@ -188,7 +195,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
                                                                self.rnn_output_layers)
         model = SequentialRNN(enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=classifiers.bidir_rnn_classifier_split,
-                           true_wd=self.true_wd)
+                           true_wd=self.true_wd, metrics=metrics)
         learn.callback_fns += [StatsRecorder,
                                partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
         return learn
@@ -198,6 +205,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         if self.train_set_fraction < 1:
             num_samples = int(len(trn_df) * self.train_set_fraction)
             trn_df = trn_df.iloc[:num_samples]
+            val_df = val_df.iloc[:int(num_samples/3)]
         data_cls = self.get_data_bunch(trn_df, val_df, tst_df)
 
         agg_inp_size = 0
@@ -211,12 +219,13 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
 
         agg_params = dict(dv=agg_inp_size, **self.aggregation_params)
         agg = sequence_aggregations.Aggregation.factory(self.aggregation_class, agg_params)
+        metrics = [metrics_registry[m] for m in self.metrics]
         if self.bidir:
-            learn = self.get_bidir_learner(data_cls, agg)
+            learn = self.get_bidir_learner(data_cls, agg, metrics)
             learn.model[0].enc1.load_state_dict(torch.load(self.fwd_enc_path + '.pth'))
             learn.model[0].enc2.load_state_dict(torch.load(self.bwd_enc_path + '.pth'))
         else:
-            learn = self.get_learner(data_cls, agg)
+            learn = self.get_learner(data_cls, agg, metrics)
             if self.backwards:
                 learn.load_encoder(self.bwd_enc_path)
             else:
@@ -276,4 +285,18 @@ class Imdb(ExperimentCls):
         split = list(kf.split(trn_df_full))[fold_num]
         trn_df = trn_df_full.iloc[split[0]]
         val_df = trn_df_full.iloc[split[1]]
+        return trn_df, val_df, tst_df
+
+
+@dataclass
+class Poleval1(ExperimentCls):
+
+    def get_dfs(self, fold_num: int=0):
+        # TODO: create separate validation and test
+        df_full = pd.read_csv(os.path.join(self.dataset_path, 'task1_train.csv'))
+
+        kf = KFold(self.cv_num_splits, True, random_state=self.cv_random_state)
+        split = list(kf.split(df_full))[fold_num]
+        trn_df = df_full.iloc[split[0]]
+        val_df = tst_df = df_full.iloc[split[1]]  # FIXME
         return trn_df, val_df, tst_df
