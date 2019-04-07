@@ -36,9 +36,6 @@ def train_tokenizer(unsup_path, output_model_dir, model_type='bpe', vocab_size=3
     with tempfile.NamedTemporaryFile(mode='w') as raw_file:
         lines = list(df.texts)
         raw_file.write('\n'.join(lines))
-
-        #         spm_model_path = model_prefix + '.model'
-        #         vocab_path = model_prefix+'.vocab'
         model_prefix = os.path.join(output_model_dir, model_filename_base)
 
         sp_params = [

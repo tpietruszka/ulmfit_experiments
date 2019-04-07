@@ -1,12 +1,12 @@
-from dataclasses import dataclass
 from fastai.text import *
 from fastai.callbacks import SaveModelCallback
 from sacremoses import MosesTokenizer
 from sklearn.model_selection import KFold
 from . import sequence_aggregations
 from . import classifiers
-from .utils import StatsRecorder, RegisteredAbstractMeta
-from abc import ABCMeta, abstractmethod
+from . import sentencepiece_tok
+from .utils import *
+from abc import abstractmethod
 
 URL_TOKEN = 'xxurl'
 PAD_TOKEN_ID = 1
@@ -14,6 +14,8 @@ PAD_TOKEN_ID = 1
 CLS_BEST_FILE = 'cls_best'
 
 metrics_registry = {'accuracy': accuracy, 'f1': FBeta(beta=1)}
+callbacks_registry = {'auroc': AUROC,
+                      'average_precision_score': AveragePrecisionScore}
 
 
 def remove_urls(t: str) -> str:
@@ -119,6 +121,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     train_set_fraction: float = 1.
 
     metrics: Sequence[str] = ('accuracy',)
+    callbacks: Sequence[str] = ()
 
     @classmethod
     def factory(cls, name: str, params: Dict) -> 'ExperimentCls':
@@ -144,25 +147,41 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     def bwd_enc_path(self) -> str:
         return os.path.join(self.dataset_path, self.encoder_subdir, 'bwd_enc')
 
-    def get_data_bunch(self, trn_df, val_df, tst_df) -> DataBunch:
-        args = dict(tokenizer=Tokenizer(tok_func=MosesTokenizerFunc, lang=self.lang, pre_rules=self.pre_rules,
-                                        post_rules=self.post_rules))
+    @property
+    def spm_vocab_path(self) -> str:
+        return os.path.join(self.dataset_path, self.encoder_subdir, sentencepiece_tok.vocab_filename)
 
-        with open(self.vocab_path, 'rb') as file:
-            vocab = Vocab(pickle.load(file))
-        args['vocab'] = vocab
+    @property
+    def spm_model_path(self) -> str:
+        return os.path.join(self.dataset_path, self.encoder_subdir, sentencepiece_tok.model_filename)
+
+    @property
+    def is_sentencepiece(self) -> bool:
+        return all([os.path.exists(f) for f in [self.spm_model_path, self.spm_vocab_path]])
+
+    def get_data_bunch(self, trn_df, val_df, tst_df) -> DataBunch:
+        if self.is_sentencepiece:
+            tokenizer, vocab = sentencepiece_tok.load_tokenizer(os.path.join(self.dataset_path, self.encoder_subdir))
+        else:
+            tokenizer = Tokenizer(tok_func=MosesTokenizerFunc, lang=self.lang, pre_rules=self.pre_rules,
+                                  post_rules=self.post_rules)
+            with open(self.vocab_path, 'rb') as file:
+                vocab = Vocab(pickle.load(file))
+
         print(f"Running tokenization...")
         data_cls = TextClasDataBunch.from_df(path=self.cache_dir, train_df=trn_df, valid_df=val_df,
                                              test_df=tst_df, max_vocab=self.max_vocab, bs=self.bs,
                                              backwards=self.backwards, text_cols=self.text_cols,
-                                             label_cols=self.label_col, mark_fields=self.mark_fields, **args)
+                                             label_cols=self.label_col, mark_fields=self.mark_fields,
+                                             tokenizer=tokenizer, vocab=vocab)
         print('Size of vocabulary:', len(data_cls.vocab.itos))
         print('First 20 words in vocab:', data_cls.vocab.itos[:20])
         return data_cls
 
     def get_learner(self, data_bunch: DataBunch,
                     agg_model: sequence_aggregations.Aggregation,
-                    metrics: Optional[MetricFuncList] = None) -> 'RNNLearner':
+                    metrics: Optional[MetricFuncList] = None,
+                    callbacks: Optional[List[Callback]] = None) -> 'RNNLearner':
         encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
         num_classes = data_bunch.c
         vocab_size = len(data_bunch.vocab.itos)
@@ -177,11 +196,14 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
                            metrics=metrics)
         learn.callback_fns += [StatsRecorder,
                                partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
+        if callbacks:
+            learn.callback_fns += callbacks
         return learn
 
     def get_bidir_learner(self, data_bunch: DataBunch,
                           agg_model: sequence_aggregations.Aggregation,
-                          metrics: Optional[MetricFuncList] = None) -> 'RNNLearner':
+                          metrics: Optional[MetricFuncList] = None,
+                          callbacks: Optional[List[Callback]] = None) -> 'RNNLearner':
         assert not self.backwards
         encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
         num_classes = data_bunch.c
@@ -198,6 +220,8 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
                            true_wd=self.true_wd, metrics=metrics)
         learn.callback_fns += [StatsRecorder,
                                partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
+        if callbacks:
+            learn.callback_fns += callbacks
         return learn
 
     def run(self) -> Tuple[Dict, 'RNNLearner']:
@@ -220,12 +244,13 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         agg_params = dict(dv=agg_inp_size, **self.aggregation_params)
         agg = sequence_aggregations.Aggregation.factory(self.aggregation_class, agg_params)
         metrics = [metrics_registry[m] for m in self.metrics]
+        cbs = [callbacks_registry[c] for c in self.callbacks]
         if self.bidir:
-            learn = self.get_bidir_learner(data_cls, agg, metrics)
+            learn = self.get_bidir_learner(data_cls, agg, metrics, cbs)
             learn.model[0].enc1.load_state_dict(torch.load(self.fwd_enc_path + '.pth'))
             learn.model[0].enc2.load_state_dict(torch.load(self.bwd_enc_path + '.pth'))
         else:
-            learn = self.get_learner(data_cls, agg, metrics)
+            learn = self.get_learner(data_cls, agg, metrics, cbs)
             if self.backwards:
                 learn.load_encoder(self.bwd_enc_path)
             else:
@@ -293,10 +318,11 @@ class Poleval1(ExperimentCls):
 
     def get_dfs(self, fold_num: int=0):
         # TODO: create separate validation and test
-        df_full = pd.read_csv(os.path.join(self.dataset_path, 'task1_train.csv'))
+        df_full = pd.read_csv(os.path.join(self.dataset_path, 'task1_train.csv'), header=None)
 
         kf = KFold(self.cv_num_splits, True, random_state=self.cv_random_state)
         split = list(kf.split(df_full))[fold_num]
         trn_df = df_full.iloc[split[0]]
-        val_df = tst_df = df_full.iloc[split[1]]  # FIXME
+        val_df = df_full.iloc[split[1]]  # FIXME
+        tst_df = pd.read_csv(os.path.join(self.dataset_path, 'task1_test.csv'), header=None)
         return trn_df, val_df, tst_df
