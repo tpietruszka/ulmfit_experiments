@@ -119,6 +119,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
 
     calc_test_score: bool = False
     train_set_fraction: float = 1.
+    subsample_id: int = 1  # if train_set_fraction < 1, this selects which part goes into CV split. 0 -> old behaviour
 
     metrics: Sequence[str] = ('accuracy',)
     callbacks: Sequence[str] = ()
@@ -227,9 +228,14 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     def run(self) -> Tuple[Dict, 'RNNLearner']:
         trn_df, val_df, tst_df = self.get_dfs(self.cv_fold_num)
         if self.train_set_fraction < 1:
-            num_samples = int(len(trn_df) * self.train_set_fraction)
-            trn_df = trn_df.iloc[:num_samples]
-            val_df = val_df.iloc[:int(num_samples/3)]
+            if self.subsample_id == 0:
+                num_samples = int(len(trn_df) * self.train_set_fraction)
+                trn_df = trn_df.iloc[:num_samples]
+                val_df = val_df.iloc[:int(num_samples/3)]
+            else:
+                trn_df = trn_df.sample(frac=self.train_set_fraction, random_state=self.subsample_id)
+                val_df = val_df.sample(frac=self.train_set_fraction, random_state=self.subsample_id)
+
         data_cls = self.get_data_bunch(trn_df, val_df, tst_df)
 
         agg_inp_size = 0
