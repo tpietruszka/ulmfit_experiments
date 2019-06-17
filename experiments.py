@@ -118,6 +118,8 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     cv_fold_num: int = 0
 
     calc_test_score: bool = False
+    load_best_validation_score: bool = True  # if True, version with the best val score is loaded, used for test
+    # scoring and saved as the final model. Otherwise the last version is used
     train_set_fraction: float = 1.
     subsample_id: int = 1  # if train_set_fraction < 1, this selects which part goes into CV split. 0 -> old behaviour
 
@@ -195,8 +197,9 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         model = SequentialRNN(rnn_enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=rnn_classifier_split, true_wd=self.true_wd,
                            metrics=metrics)
-        learn.callback_fns += [StatsRecorder,
-                               partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
+        learn.callback_fns += [StatsRecorder]
+        if self.load_best_validation_score:
+            learn.callback_fns += [partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
         if callbacks:
             learn.callback_fns += callbacks
         return learn
@@ -219,8 +222,9 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         model = SequentialRNN(enc, classifier)
         learn = RNNLearner(data_bunch, model, self.bptt, split_func=classifiers.bidir_rnn_classifier_split,
                            true_wd=self.true_wd, metrics=metrics)
-        learn.callback_fns += [StatsRecorder,
-                               partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
+        learn.callback_fns += [StatsRecorder]
+        if self.load_best_validation_score:
+            learn.callback_fns += [partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
         if callbacks:
             learn.callback_fns += callbacks
         return learn

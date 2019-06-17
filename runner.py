@@ -35,7 +35,6 @@ class MongoExperimentRunner:
         ex = self.experiment_factory(job['type'], job['params'])
         try:
             results, learn = ex.run()
-            learn.load(experiments.CLS_BEST_FILE)
             job['results'] = results
             target_collection = self.completed_collection
         except Exception:
