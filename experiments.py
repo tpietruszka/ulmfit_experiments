@@ -104,7 +104,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     # for training on smaller datasets, more dropout is necessary
     encoder_dps: Sequence[float] = tuple(default_dropout['classifier'][:-1])
     classifier_dps: Sequence[float] = (0.4, 0.1)
-    lin_ftrs = (50,)
+    lin_ftrs: Sequence[int] = (50,)
     drop_mult: float = 1.  # main switch to proportionally rescale dps
     clip: float = 0.12
     true_wd: bool = True
