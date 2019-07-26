@@ -124,6 +124,8 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
     new_split_val_fraction: float = 0.25
 
     calc_test_score: bool = False
+    calc_test_extra_metrics: Sequence[str] = ()  # names of metrics from `sklearn.metrics`, should return float
+
     load_best_validation_score: bool = True  # if True, version with the best val score is loaded, used for test
     # scoring and saved as the final model. Otherwise the last version is used
     train_set_fraction: float = 1.  # if set to <1, after CV chooses train and validation sets, thay are subsampled
@@ -310,6 +312,9 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
             preds = learn.get_preds(DatasetType.Test, ordered=True)
             test_score = accuracy(preds[0], Tensor(tst_df[self.label_col]).long()).item()
             results['test_score'] = test_score
+            for metric_name in self.calc_test_extra_metrics:
+                f = get_metric(metric_name)
+                results['test_' + metric_name] = f(tst_df[self.label_col], preds[0][:, 1])
         results['best_val_acc'] = max([ep['accuracy'] for phase in results['phase_stats'] for ep in phase])
         return results, learn
 

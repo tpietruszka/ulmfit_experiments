@@ -2,6 +2,11 @@ from abc import ABCMeta, abstractmethod
 from fastai.torch_core import *
 from fastai.basic_train import Learner, LearnerCallback
 from sklearn.metrics import roc_auc_score, average_precision_score
+import sklearn.metrics
+
+
+def get_metric(metric_name: str) -> Callable:
+    return getattr(sklearn.metrics, metric_name)
 
 
 class StatsRecorder(LearnerCallback):
