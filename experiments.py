@@ -146,12 +146,9 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
             all_df = pd.concat(dfs)
             train_df = all_df.sample(frac=self.new_split_train_fraction, random_state=self.subsample_id)
             rest = all_df.drop(train_df.index)
-            if self.new_split_val_fraction > 0:
-                val_df = rest.sample(n=int(len(all_df) * self.new_split_val_fraction), random_state=self.subsample_id)
-                rest = rest.drop(val_df.index)
-            else:
-                val_df = None
-            dfs = [train_df, val_df, rest]
+            val_df = rest.sample(n=int(len(all_df) * self.new_split_val_fraction), random_state=self.subsample_id)
+            test_df = rest.drop(val_df.index)
+            dfs = [train_df, val_df, test_df]
         return dfs
 
     @abstractmethod
@@ -255,7 +252,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         return learn
 
     def run(self) -> Tuple[Dict, 'RNNLearner']:
-        trn_df, val_df, tst_df = self.load_dfs(self.cv_fold_num)
+        trn_df, val_df, tst_df = self.get_dfs(self.cv_fold_num)
         if self.train_set_fraction < 1:
             if self.new_split:
                 raise ValueError("Not permitted to set both new_split=True and train_set_fraction < 1")
@@ -310,7 +307,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
             gc.collect()
             torch.cuda.empty_cache()
             preds = learn.get_preds(DatasetType.Test, ordered=True)
-            test_score = accuracy(preds[0], Tensor(tst_df[self.label_col]).long()).item()
+            test_score = accuracy(preds[0], Tensor(tst_df[self.label_col].values).long()).item()
             results['test_score'] = test_score
             for metric_name in self.calc_test_extra_metrics:
                 f = get_metric(metric_name)
