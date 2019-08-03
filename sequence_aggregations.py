@@ -129,13 +129,16 @@ class MultiLayerPointwise(nn.Module):
 
 class BranchingAttentionAggregation(Aggregation):
     def __init__(self, dv: int, att_hid_layers: Sequence[int], att_dropouts: Sequence[float],
-                 agg_dim: Optional[int] = None):
+                 agg_dim: Optional[int] = None, add_last_el: bool = False):
         super().__init__()
         att_layers = [dv] + list(att_hid_layers) + [1]
         self.head = MultiLayerPointwise(att_layers, att_dropouts, batchnorm=False)
         self.agg_dim = agg_dim
         if agg_dim:
             self.agg = MultiLayerPointwise([dv, agg_dim], 0, batchnorm=False)
+        self.add_last_el = add_last_el
+        if add_last_el:
+            self.last_el_weight = nn.Parameter(tensor(0.5))
         self.dv = dv
         self.last_weights = None
 
@@ -151,5 +154,8 @@ class BranchingAttentionAggregation(Aggregation):
         else:
             to_agg = inp
         weighted = to_agg * weights.unsqueeze(-1).expand_as(to_agg)
-        res = weighted.sum(1)
+        if self.add_last_el:
+            res = weighted.sum(1) * (1-self.last_el_weight) + self.last_el_weight * to_agg[:, -1, :]
+        else:
+            res = weighted.sum(1)
         return res
