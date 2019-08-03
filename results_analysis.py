@@ -53,6 +53,8 @@ def get_results(db: pymongo.database.Database, exp_type: str, dicts_to_json: boo
 
 def grouped_results_stats(params_df, results_dct, min_runs=15, drop_run_lists=True,
                           extra_cols: Optional[List[str]] = None):
+    if extra_cols is None:
+        extra_cols = []
     gb = params_df.groupby(list(set(params_df.columns) - {'subsample_id'}))
     run_lists = gb.apply(lambda d: tuple(d.index)).rename('run_list').to_frame()
     run_lists = run_lists.loc[run_lists.run_list.apply(lambda x: len(x)) > min_runs].reset_index()
