@@ -51,8 +51,23 @@ def get_results(db: pymongo.database.Database, exp_type: str, dicts_to_json: boo
     return params_df, results_dct
 
 
-def grouped_results_stats(params_df, results_dct, min_runs=15, drop_run_lists=True,
+def grouped_results_stats(params_df: pd.DataFrame, results_dct: Dict[int, Dict],
+                          min_runs: int = 15, drop_run_lists: bool = True,
                           extra_cols: Optional[List[str]] = None):
+    """
+    Groups runs that differ only by 'subsample_id', computes stats about their results
+    using `run_list_stats()`.
+    Parameters that are constant for all groups are returned separately.
+    Index of the df - lowest run number in the group
+
+    :param params_df: as returned by `get_results`
+    :param results_dct: as returned by `get_results`
+    :param min_runs: drop groups with fewer runs
+    :param drop_run_lists: drop the `run_list` column? It is ugly to print
+    :param extra_cols: extra fields of result objects to compute means and stds of
+    :return: Tuple[pd.DataFrame, pd.Series]
+    """
+
     if extra_cols is None:
         extra_cols = []
     gb = params_df.groupby(list(set(params_df.columns) - {'subsample_id'}))
@@ -63,6 +78,8 @@ def grouped_results_stats(params_df, results_dct, min_runs=15, drop_run_lists=Tr
     run_lists = run_lists.drop(columns=const_cols)
     stats_df = run_lists.run_list.apply(run_list_stats, run_results=results_dct, extra_cols=extra_cols)
     df = run_lists.join(stats_df).sort_values('mean_test_score')
+    lowest_run_ids = df.run_list.apply(min).rename('min_run_id')
+    df = df.set_index(lowest_run_ids)
     if drop_run_lists:
         df = df.drop(columns=['run_list'])
     return df, const_values
