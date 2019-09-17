@@ -129,7 +129,8 @@ class MultiLayerPointwise(nn.Module):
 
 class BranchingAttentionAggregation(Aggregation):
     def __init__(self, dv: int, att_hid_layers: Sequence[int], att_dropouts: Sequence[float],
-                 agg_dim: Optional[int] = None, add_last_el: bool = False):
+                 agg_dim: Optional[int] = None, add_last_el: bool = False,
+                 last_el_weight_special: bool = False):
         super().__init__()
         att_layers = [dv] + list(att_hid_layers) + [1]
         self.head = MultiLayerPointwise(att_layers, att_dropouts, batchnorm=False)
@@ -137,7 +138,11 @@ class BranchingAttentionAggregation(Aggregation):
         if agg_dim:
             self.agg = MultiLayerPointwise([dv, agg_dim], 0, batchnorm=False)
         self.add_last_el = add_last_el
-        if add_last_el:
+        self.last_el_weight_special = last_el_weight_special
+        if add_last_el and last_el_weight_special:
+            raise ValueError("Only one way of setting weights for last sequence"
+                             "elements is allowed.")
+        if add_last_el or last_el_weight_special:
             self.last_el_weight = nn.Parameter(tensor(0.5))
         self.dv = dv
         self.last_weights = None
@@ -147,7 +152,10 @@ class BranchingAttentionAggregation(Aggregation):
         return self.agg_dim or self.dv
 
     def forward(self, inp):
-        weights = F.softmax(self.head(inp).squeeze(), dim=1)
+        weights_unnorm = self.head(inp).squeeze()
+        if self.last_el_weight_special:
+            weights_unnorm[:, -1] = self.last_el_weight
+        weights = F.softmax(weights_unnorm, dim=1)
         self.last_weights = weights
         if self.agg_dim:
             to_agg = self.agg(inp)
