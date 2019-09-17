@@ -152,7 +152,7 @@ class BranchingAttentionAggregation(Aggregation):
         return self.agg_dim or self.dv
 
     def forward(self, inp):
-        weights_unnorm = self.head(inp).squeeze()
+        weights_unnorm = self.head(inp).squeeze(-1)
         if self.last_el_weight_special:
             weights_unnorm[:, -1] = self.last_el_weight
         weights = F.softmax(weights_unnorm, dim=1)
