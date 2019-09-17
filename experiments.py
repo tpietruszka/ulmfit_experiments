@@ -251,6 +251,20 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
             learn.callback_fns += callbacks
         return learn
 
+    def get_aggregation(self) -> 'Aggregation':
+        agg_inp_size = 0
+        for lnum in self.rnn_output_layers:
+            if lnum == -1 or lnum == (self.nl - 1):
+                agg_inp_size += self.emb_sz
+            else:
+                agg_inp_size += self.nh
+        if self.bidir:
+            agg_inp_size *= 2
+
+        agg_params = dict(dv=agg_inp_size, **self.aggregation_params)
+        agg = sequence_aggregations.Aggregation.factory(self.aggregation_class, agg_params)
+        return agg
+
     def run(self) -> Tuple[Dict, 'RNNLearner']:
         trn_df, val_df, tst_df = self.get_dfs(self.cv_fold_num)
         if self.train_set_fraction < 1:
@@ -265,18 +279,7 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
                 val_df = val_df.sample(frac=self.train_set_fraction, random_state=self.subsample_id)
 
         data_cls = self.get_data_bunch(trn_df, val_df, tst_df)
-
-        agg_inp_size = 0
-        for lnum in self.rnn_output_layers:
-            if lnum == -1 or lnum == (self.nl-1):
-                agg_inp_size += self.emb_sz
-            else:
-                agg_inp_size += self.nh
-        if self.bidir:
-            agg_inp_size *= 2
-
-        agg_params = dict(dv=agg_inp_size, **self.aggregation_params)
-        agg = sequence_aggregations.Aggregation.factory(self.aggregation_class, agg_params)
+        agg = self.get_aggregation()
         metrics = [metrics_registry[m] for m in self.metrics]
         cbs = [callbacks_registry[c] for c in self.callbacks]
         if self.bidir:
@@ -302,16 +305,19 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
             results['phase_stats'].append(copy(learn.stats_recorder.stats))
             results['train_losses'].append([l.item() for l in learn.recorder.losses])
         if self.calc_test_score:
+            correct = tst_df[self.label_col]
+            if data_cls.train_ds.y.c > 2:
+                correct = correct.replace(data_cls.train_ds.y.c2i)
             data_cls.train_dl = None
             data_cls.valid_dl = None
             gc.collect()
             torch.cuda.empty_cache()
             preds = learn.get_preds(DatasetType.Test, ordered=True)
-            test_score = accuracy(preds[0], Tensor(tst_df[self.label_col].values).long()).item()
+            test_score = accuracy(preds[0], Tensor(correct.values).long()).item()
             results['test_score'] = test_score
             for metric_name in self.calc_test_extra_metrics:
                 f = get_metric(metric_name)
-                results['test_' + metric_name] = f(tst_df[self.label_col], preds[0][:, 1])
+                results['test_' + metric_name] = f(correct, preds[0][:, 1])
         results['best_val_acc'] = max([ep['accuracy'] for phase in results['phase_stats'] for ep in phase])
         return results, learn
 
@@ -354,12 +360,11 @@ class Imdb(ExperimentCls):
 class Poleval1(ExperimentCls):
 
     def load_dfs(self, fold_num: int=0):
-        # TODO: create separate validation and test
         df_full = pd.read_csv(os.path.join(self.dataset_path, 'task1_train.csv'), header=None)
 
         kf = KFold(self.cv_num_splits, True, random_state=self.cv_random_state)
         split = list(kf.split(df_full))[fold_num]
         trn_df = df_full.iloc[split[0]]
-        val_df = df_full.iloc[split[1]]  # FIXME
+        val_df = df_full.iloc[split[1]]
         tst_df = pd.read_csv(os.path.join(self.dataset_path, 'task1_test.csv'), header=None)
         return trn_df, val_df, tst_df
