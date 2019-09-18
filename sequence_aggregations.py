@@ -146,6 +146,7 @@ class BranchingAttentionAggregation(Aggregation):
             self.last_el_weight = nn.Parameter(tensor(0.5))
         self.dv = dv
         self.last_weights = None
+        self.last_features = None
 
     @property
     def output_dim(self):
@@ -156,11 +157,12 @@ class BranchingAttentionAggregation(Aggregation):
         if self.last_el_weight_special:
             weights_unnorm[:, -1] = self.last_el_weight
         weights = F.softmax(weights_unnorm, dim=1)
-        self.last_weights = weights
+        self.last_weights = weights.detach().cpu()
         if self.agg_dim:
             to_agg = self.agg(inp)
         else:
             to_agg = inp
+        self.last_features = to_agg.detach().cpu()
         weighted = to_agg * weights.unsqueeze(-1).expand_as(to_agg)
         if self.add_last_el:
             res = weighted.sum(1) * (1-self.last_el_weight) + self.last_el_weight * to_agg[:, -1, :]
