@@ -5,10 +5,15 @@ import pandas as pd
 import traceback
 import torch
 import os
+import sys
 import numpy as np
 import argparse
 from typing import *
-from ulmfit_experiments import experiments
+try:
+    from ulmfit_experiments import experiments
+except ModuleNotFoundError:
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from ulmfit_experiments import experiments
 
 
 class MongoExperimentRunner:
