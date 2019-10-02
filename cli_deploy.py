@@ -5,6 +5,7 @@ import cli_common
 from ulmfit_experiments import experiments # has to be imported after cli_common
 from fastai.text import *
 from fastai.text.learner import RNNLearner
+import torch
 
 results_dir = (pathlib.Path(__file__).parent / 'trained_models').resolve()
 
@@ -26,7 +27,7 @@ def main():
     parser.add_argument('--cpu', action='store_true', default=False, help='Run on CPU only')
     args = parser.parse_args()
     if args.cpu:
-        defaults.device = 'cpu'
+        defaults.device = torch.device('cpu')
     model_dir = results_dir / args.run_id
     learner = load_learner(model_dir, 'learner.pkl')  # TODO: move paths etc to a config
     if not args.batch:  # interactive mode

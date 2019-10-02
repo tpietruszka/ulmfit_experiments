@@ -11,11 +11,10 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import cli_common
 from ulmfit_experiments import experiments # has to be imported after cli_common
-from fastai.text import learner, load_learner, to_np
+from fastai.text import learner, load_learner, to_np, defaults
 from fastai.text.learner import RNNLearner
 from cli_common import results_dir
-
-import ipdb
+import torch
 
 # external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
@@ -93,7 +92,10 @@ def render_probabilities(probas: Dict[str, float]):
 def main():
     parser = argparse.ArgumentParser(description='Load a trained model and score texts')
     parser.add_argument('run_id', type=str, help='Model to load. Corresponds to a directory within "./trained_models/"')
+    parser.add_argument('--cpu', action='store_true', default=False, help='Run on CPU only')
     args = parser.parse_args()
+    if args.cpu:
+        defaults.device = torch.device('cpu')
     model_dir = results_dir / args.run_id
     learner = load_learner(model_dir, 'learner.pkl')  # TODO: move paths etc to a config
 
