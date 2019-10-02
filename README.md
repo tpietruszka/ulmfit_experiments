@@ -4,13 +4,6 @@ This project was created to queue, run and store results of experiments -
 attempts to improve the ULMFiT algorithm, focusing on the classifier head
 architecture.
 
-The primary mode of operation was to run `python runner.py [storage directory]`,
-which creates a worker to process a queue of experiments. Both the queue and
-the results are stored in a MongoDB database, a DSN to which can be passed to
-the script as an additional parameter (see `python runner.py -h`). Results
-analysis was performed using various Jupyter notebooks, depending on the current
-research hypothesis.
-
 Currently, this project can handle 3 different classification tasks on their
 corresponding datasets: "IMDB", "Poleval Cyberbullying Detection" and "Fact
 Checking Question Classification". For each of them, there is a subfolder within
@@ -19,6 +12,19 @@ language model for each, adapted for the specific domain.
 
 Simple scripts have been added to enable training and evaluating classifiers
 without setting up a database and preparing dedicated notebooks.
+
+`visualize.py` lets the user feed text to the model, then inspect attention
+scores associated with each token and features calculated for it. The interface
+is browser-based, the script starts a simple local webserver based on Dash.
+
+The primary mode of operation originally was to run
+`python runner.py [storage directory]`, which creates a worker to process a
+queue of experiments. Both the queue and the results are stored in a MongoDB
+database, a DSN to which can be passed to the script as an additional parameter
+(see `python runner.py -h`). Results analysis was performed using various
+Jupyter notebooks, depending on the current research hypothesis.
+
+
 
 ### Training
 To train a classifier, after the setup as described below,
@@ -41,37 +47,77 @@ the config requires that, and stores several things in
   interesting)
 - a trained model, which can later be used by `cli_deploy.py`.
 
+### Visualizing attention
+
+`python visualize.py [run_id]` loads a given model, and starts a webserver where
+the user can supply texts, see the classification decisions and inspect
+the attention scores and features calculated for each token.
+
+To force evaluation on the CPU (e.g. if there is a CUDA device, but it is too
+old), add a `--cpu` flag.
+
+The webserver should be available on localhost, port 8050.
+
+Trained models corresponding to the example configs are provided, and should be
+ready to use as soon as requirements are met and setup (below) is completed.
+
 ### Model evaluation
 
 `python cli_deploy.py [run_id]` simply loads a given classification model, and
 then evaluates texts provided through standard input using that model. By
 default, it prompts the user for each line of text and displays the results.
 
+To force evaluation on the CPU (e.g. if there is a CUDA device, but it is too
+old), add a `--cpu` flag.
+
 With a `--batch` flag, it reads standard input until EOF is found, and outputs
 results as CSV (the first column being the predicted class, and the rest -
   probabilities of belonging to each of the classes).
 
-Trained models corresponding to the example configs are provided, and should be
-ready to use as soon as requirements are met and setup (below) is completed.
-
 ### Requirements
+#### Training models - CUDA enabled:
+
 - NVidia GPU with at least 8 GB RAM (for model training, less for evaluation)
 - CUDA 9 drivers
 - Conda package manager (https://www.anaconda.com/distribution/)
 - Linux-based OS (might work on Windows, but has not been tested)
 
-For model training, write-access to the filesystem is necessary (including the data directory, for temporary files).
+The conda environment has to be set up according to `environment.yml` (see below)
+
+Write-access to the filesystem is necessary (including the data directory, for temporary files).
+#### Evaluating models, visualization - possible without GPU
+
+- Conda package manager
+- Linux-based OS (might work on Windows, but has not been tested)
+
+The conda environment can be set up either with `environment.yml`
+(if the requirements for training models are met), or with `environment_cpu.yml`
+(to run all calculations on the CPU, without CUDA acceleration).
+
+
 ### Setup
-To prepare the appropriate Conda environment with required packages:
+As described above, if the system is equipped with an appropriate CUDA-enabled
+GPU, `environment.yml` should be used. Otherwise, `environment_cpu.yml` can
+be used to prepare just for evaluating and visualizing attention scores.
+
+To prepare the chosen Conda environment, run:
 ```
-conda env create -n ulmfit_experiments -f environment.yml
+conda env create -f environment.yml
 ```
+or
+```
+conda env create -f environment_cpu.yml
+```
+
 
 To activate the environment (for Conda >= 4.4):
 ```
 conda activate ulmfit_experiments
 ```
-
+or
+```
+conda activate ulmfit_experiments_cpu
+```
 ### Example runs
 Example usage of the provided `fact_checking_example` model:
 ```

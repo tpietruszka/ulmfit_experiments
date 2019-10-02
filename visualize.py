@@ -125,6 +125,8 @@ def main():
 # TODO: disable sentiment or attention
 # TODO: show numbers on hover
 # TODO: choose between models
+# TODO: choose port and ip
+
     app.run_server(debug=True, host="0.0.0.0")
 
 if __name__ == '__main__':
