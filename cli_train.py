@@ -7,11 +7,9 @@ import pathlib
 import torch
 import numpy as np
 from typing import *
-try:
-    from ulmfit_experiments import experiments
-except ModuleNotFoundError:
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from ulmfit_experiments import experiments
+import cli_common
+from ulmfit_experiments import experiments # has to be imported after cli_common
+from fastai.text import defaults
 
 results_dir = (pathlib.Path(__file__).parent / 'trained_models').resolve()
 

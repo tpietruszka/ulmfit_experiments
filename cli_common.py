@@ -1,6 +1,7 @@
 import pathlib
 import os
 import sys
+os.environ['QT_QPA_PLATFORM'] = 'offscreen' # prevents some fastai imports from causing a crash
 try:
     from ulmfit_experiments import experiments
 except ModuleNotFoundError:

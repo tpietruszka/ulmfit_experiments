@@ -1,13 +1,8 @@
 import sys
 import os
-os.environ['QT_QPA_PLATFORM'] = 'offscreen' # prevents some fastai imports from causing a crash
-import ipdb
 import argparse
-try:
-    from ulmfit_experiments import experiments
-except ModuleNotFoundError:
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from ulmfit_experiments import experiments
+import cli_common
+from ulmfit_experiments import experiments # has to be imported after cli_common
 from fastai.text import *
 from fastai.text.learner import RNNLearner
 
@@ -28,7 +23,10 @@ def main():
     parser = argparse.ArgumentParser(description='Load a trained model and score texts')
     parser.add_argument('run_id', type=str, help='Model to load. Corresponds to a directory within "./trained_models/"')
     parser.add_argument('--batch', action='store_true', default=False, help='Batch mode - do not display prompts, read until EOF')
+    parser.add_argument('--cpu', action='store_true', default=False, help='Run on CPU only')
     args = parser.parse_args()
+    if args.cpu:
+        defaults.device = 'cpu'
     model_dir = results_dir / args.run_id
     learner = load_learner(model_dir, 'learner.pkl')  # TODO: move paths etc to a config
     if not args.batch:  # interactive mode
