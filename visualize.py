@@ -43,6 +43,12 @@ app.layout = html.Div(id='mainContainer', children=[
     html.Label(htmlFor='featureNumberSlider', children="Which feature to show?"),
     featureNumberSlider
         ], className='row'),
+    html.Div(children=[
+        html.Label(htmlFor='colorRangeSlider', children="Range of values to map into the color range [red, green]:"),
+        dcc.RangeSlider('colorRangeSlider', min=-30, max=30, value=[-3, 3], pushable=1,
+                        tooltip={'always_visible': True, 'placement': 'left'})
+        ], className='row'),
+
     html.Div(id='attentionWeightsDiv'),
     html.Div(id='processedTextData', style={'display': 'none'}, children='{}'),
 ])
@@ -111,14 +117,18 @@ def render_probabilities(probas: Dict[str, float]):
 
 @app.callback(Output('attentionWeightsDiv', component_property='children'),
     [Input('processedTextData', 'children'),
-    Input('featureNumberSlider', 'value')]
+    Input('featureNumberSlider', 'value'),
+    Input('colorRangeSlider', 'value')]
 )
-def display_attention(att_json, feat_number):
+def display_attention(att_json, feat_number, color_range):
     att_df = pd.read_json(att_json).sort_index()
     if att_df.empty:
         return ''
     att_df = att_df.assign(feature = att_df.loc[:, 'feat_' + str(feat_number)])
-    att_df = att_df.assign(feature_color = ((att_df.feature * 15) + 50).clip(0,100))
+
+    crange = color_range[1] - color_range[0]
+    att_df = att_df.assign(feature_color =
+                           ((att_df.feature - color_range[0]) / crange * 100).clip(0,100))
     # features = ((features - features.mean()) / features.std()) * 15 + 50
     # red is 0, yellow 50, green 100
     att_word_spans = [render_word(r.word, r.weight, r.feature, r.feature_color) for r in att_df.itertuples()]
@@ -155,11 +165,8 @@ def main():
         decision, probas, att_df = process_sample(learner, input_value)
         return render_decision(decision), render_probabilities(probas), att_df.to_json()
 
-# TODO: rescaling and flipping sentiment as parameters
-# TODO; choosing which feature to analyze
 # TODO: histogram of the sentiment
 # TODO: disable sentiment or attention
-# TODO: show numbers on hover
 # TODO: choose between models
 # TODO: choose port and ip
 
