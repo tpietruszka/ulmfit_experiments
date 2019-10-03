@@ -153,6 +153,8 @@ def main():
     parser = argparse.ArgumentParser(description='Load a trained model and score texts')
     parser.add_argument('run_id', type=str, help='Model to load. Corresponds to a directory within "./trained_models/"')
     parser.add_argument('--cpu', action='store_true', default=False, help='Run on CPU only')
+    parser.add_argument('--port', default='8050', help='Port to run the webserver on')
+    parser.add_argument('--ip', default='localhost', help='IP to bind. To make the server available from other hosts use "0.0.0.0" (not recommended)')
     args = parser.parse_args()
     if args.cpu:
         defaults.device = torch.device('cpu')
@@ -183,9 +185,8 @@ def main():
 # TODO: histogram of the sentiment
 # TODO: disable sentiment or attention
 # TODO: choose between models
-# TODO: choose port and ip
 
-    app.run_server(debug=True, host="0.0.0.0")
+    app.run_server(host=args.ip, port=args.port)
 
 if __name__ == '__main__':
     main()
