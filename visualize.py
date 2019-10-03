@@ -20,10 +20,18 @@ import torch
 # external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash('Attention visualization')
+@app.server.route('/static/<path:path>')
+def static_file(path):
+    static_folder = os.path.join(os.getcwd(), 'static')
+    return send_from_directory(static_folder, path)
 
 featureNumberSlider = dcc.Slider(id='featureNumberSlider', min=0, max=0, step=1,
                                  value=0, tooltip={'always_visible': True, 'placement': 'left'})
 app.layout = html.Div(children=[
+    html.Link(
+        rel='stylesheet',
+        href='/static/visualize.css'
+    ),
     html.H1(children='Attention visualization'),
     dcc.Textarea(id='userText', placeholder='Enter some text to analyze',
                  style={'width': '720px', 'padding': '5px'}),
@@ -71,9 +79,12 @@ def process_sample(learn: RNNLearner, sample_raw: str) -> Tuple[str,
                                    feats_df], axis=1)
     return decision, classes_probas, single_text_df
 
-def render_word(word: str, sentiment: float, att_weight: float) -> html.Span:
-    return html.Span(children=word, style={'background':
-        f'hsla({sentiment}, 100%, 50%, {att_weight})'})
+
+def render_word(word: str, att_weight: float, feature: float, feature_color: float) -> html.Span:
+
+    tooltip = html.Span(children=f'weight: {round(att_weight, 2)}\nvalue: {round(feature, 2)}', className='tooltiptext')
+    return html.Span(children=[word, tooltip], style={'background':
+        f'hsla({feature_color}, 100%, 50%, {att_weight})'}, className='tooltip')
 
 def render_decision(class_name: Union[str, None]) -> str:
     cls = str(class_name) if class_name else ''
@@ -112,13 +123,11 @@ def display_attention(att_json, feat_number):
     att_df = pd.read_json(att_json).sort_index()
     if att_df.empty:
         return ''
-    att_df = att_df.assign(sentiment = att_df.loc[:, 'feat_' + str(feat_number)])
-    att_df.sentiment *= 15
-    att_df.sentiment += 50
+    att_df = att_df.assign(feature = att_df.loc[:, 'feat_' + str(feat_number)])
+    att_df = att_df.assign(feature_color = ((att_df.feature * 15) + 50).clip(0,100))
     # features = ((features - features.mean()) / features.std()) * 15 + 50
-    att_df.sentiment = att_df.sentiment.clip(0, 100)
     # red is 0, yellow 50, green 100
-    att_word_spans = [render_word(r.word, r.sentiment, r.weight) for r in att_df.itertuples()]
+    att_word_spans = [render_word(r.word, r.weight, r.feature, r.feature_color) for r in att_df.itertuples()]
     att_with_spaces = list(itertools.chain(*zip(att_word_spans, [' '] * len(att_word_spans))))
     return att_with_spaces
 
