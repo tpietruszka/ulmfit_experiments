@@ -26,30 +26,37 @@ def static_file(path):
     return send_from_directory(static_folder, path)
 
 featureNumberSlider = dcc.Slider(id='featureNumberSlider', min=0, max=0, step=1,
-                                 value=0, tooltip={'always_visible': True, 'placement': 'left'})
+                                 value=0)
+numFeaturesSpan = html.Span()
+
 app.layout = html.Div(id='mainContainer', children=[
     html.Link(
         rel='stylesheet',
         href='/static/visualize.css'
     ),
     html.H1(children='Attention visualization'),
-    dcc.Textarea(id='userText', placeholder='Enter some text to analyze'),
-    html.Button('Evaluate', id='submitButton'),
+    html.Div(id='inputRow', className='row', children=[
+        dcc.Textarea(id='userText', placeholder='Enter some text to analyze'),
+        html.Button('Evaluate', id='submitButton'),
+        ]),
+    html.Div(children=[
+    html.Label(htmlFor='featureNumberSlider',
+               children=["Which feature to show? (Out of ", numFeaturesSpan, ")"]),
+    featureNumberSlider
+        ], className='row'),
+    html.Div(children=[
+        html.Label(htmlFor='colorRangeSlider', children="Map this range of values into [red, green]:"),
+        dcc.RangeSlider('colorRangeSlider', min=-15, max=15, value=[-3, 3], pushable=1,
+                        marks={m: str(m) for m in range(-15, 18, 3)})
+        ], className='row'),
+    html.Div(id='attentionWeightsDiv', children="Processed text will appear here"),
     html.Div(children=[
         dcc.Graph(id='probabilitiesGraph', config={'displayModeBar': False}),
         html.Div(id='decisionDiv'),
         ], className='row'),
-    html.Div(children=[
-    html.Label(htmlFor='featureNumberSlider', children="Which feature to show?"),
-    featureNumberSlider
-        ], className='row'),
-    html.Div(children=[
-        html.Label(htmlFor='colorRangeSlider', children="Range of values to map into the color range [red, green]:"),
-        dcc.RangeSlider('colorRangeSlider', min=-30, max=30, value=[-3, 3], pushable=1,
-                        tooltip={'always_visible': True, 'placement': 'left'})
-        ], className='row'),
 
-    html.Div(id='attentionWeightsDiv'),
+
+
     html.Div(id='processedTextData', style={'display': 'none'}, children='{}'),
 ])
 
@@ -149,6 +156,8 @@ def main():
     assert type(learner.model[1].attn) == sequence_aggregations.BranchingAttentionAggregation
     num_features = learner.model[1].attn.agg_dim
     featureNumberSlider.max = num_features - 1
+    featureNumberSlider.marks = {m: str(m) for m in range(num_features)}
+    numFeaturesSpan.children = num_features
 
 
 
