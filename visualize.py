@@ -27,31 +27,25 @@ def static_file(path):
 
 featureNumberSlider = dcc.Slider(id='featureNumberSlider', min=0, max=0, step=1,
                                  value=0, tooltip={'always_visible': True, 'placement': 'left'})
-app.layout = html.Div(children=[
+app.layout = html.Div(id='mainContainer', children=[
     html.Link(
         rel='stylesheet',
         href='/static/visualize.css'
     ),
     html.H1(children='Attention visualization'),
-    dcc.Textarea(id='userText', placeholder='Enter some text to analyze',
-                 style={'width': '720px', 'padding': '5px'}),
-     html.Div(children=[
-         # options should go here
-         ], style={'width': '720px', 'float': 'left'}),
-    html.Button('Evaluate', id='submitButton', style={'float': 'right'}),
+    dcc.Textarea(id='userText', placeholder='Enter some text to analyze'),
+    html.Button('Evaluate', id='submitButton'),
     html.Div(children=[
-        dcc.Graph(id='probabilitiesGraph', style={'width': '400px', 'float': 'left'},
-                  config={'displayModeBar': False}),
-        html.Div(id='decisionDiv', style={'width': '300px', 'float': 'left', 'padding': 'auto'}),
-        ], style={'width': '720px', 'float': 'left', 'margin': '5px'}),
+        dcc.Graph(id='probabilitiesGraph', config={'displayModeBar': False}),
+        html.Div(id='decisionDiv'),
+        ], className='row'),
     html.Div(children=[
     html.Label(htmlFor='featureNumberSlider', children="Which feature to show?"),
     featureNumberSlider
-        ], style={'width': '720px', 'float': 'left'}),
-    html.Div(id='attentionWeightsDiv', style={'border': '1px solid black',
-        'width': '720px', 'float': 'left'}),
+        ], className='row'),
+    html.Div(id='attentionWeightsDiv'),
     html.Div(id='processedTextData', style={'display': 'none'}, children='{}'),
-], style={'float': 'left', 'width': '720px', 'margin': '0 auto'})
+])
 
 
 def process_sample(learn: RNNLearner, sample_raw: str) -> Tuple[str,

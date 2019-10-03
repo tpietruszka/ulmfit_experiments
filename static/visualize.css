@@ -21,3 +21,39 @@
 .tooltip:hover .tooltiptext {
   visibility: visible;
 }
+
+div#decisionDiv {
+  width: 300px;
+  float: left;
+  padding: auto;
+}
+
+div.row {
+  width: 100%;
+  float: left;
+}
+
+#attentionWeightsDiv {
+  border: 1px solid black;
+  width: 100%;
+  float: left;
+}
+
+#mainContainer {
+  width: 720px;
+  float: left;
+}
+
+#userText {
+  width: 100%;
+  padding: 5px;
+  float: left;
+}
+#submitButton {
+  float: right;
+}
+
+#probabilitiesGraph {
+  width: 400px;
+  float: left;
+}
