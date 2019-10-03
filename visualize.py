@@ -11,6 +11,7 @@ from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import cli_common
 from ulmfit_experiments import experiments # has to be imported after cli_common
+from ulmfit_experiments import sequence_aggregations
 from fastai.text import learner, load_learner, to_np, defaults
 from fastai.text.learner import RNNLearner
 from cli_common import results_dir
@@ -20,18 +21,30 @@ import torch
 
 app = dash.Dash('Attention visualization')
 
+featureNumberSlider = dcc.Slider(id='featureNumberSlider', min=0, max=0, step=1,
+                                 value=0, tooltip={'always_visible': True, 'placement': 'left'})
 app.layout = html.Div(children=[
     html.H1(children='Attention visualization'),
     dcc.Textarea(id='userText', placeholder='Enter some text to analyze',
-                 style={'width': '720px'}),
-    html.Button('Evaluate', id='submitButton', style={'float': 'left'}),
+                 style={'width': '720px', 'padding': '5px'}),
+     html.Div(children=[
+         # options should go here
+         ], style={'width': '720px', 'float': 'left'}),
+    html.Button('Evaluate', id='submitButton', style={'float': 'right'}),
     html.Div(children=[
-        dcc.Graph(id='probabilitiesGraph', style={'width': '400px', 'float': 'left'}),
-        html.Div(id='decisionDiv', style={'width': '400px', 'float': 'left', 'padding': 'auto'}),
-        ], style={'width': '810px', 'float': 'left'}),
+        dcc.Graph(id='probabilitiesGraph', style={'width': '400px', 'float': 'left'},
+                  config={'displayModeBar': False}),
+        html.Div(id='decisionDiv', style={'width': '300px', 'float': 'left', 'padding': 'auto'}),
+        ], style={'width': '720px', 'float': 'left', 'margin': '5px'}),
+    html.Div(children=[
+    html.Label(htmlFor='featureNumberSlider', children="Which feature to show?"),
+    featureNumberSlider
+        ], style={'width': '720px', 'float': 'left'}),
     html.Div(id='attentionWeightsDiv', style={'border': '1px solid black',
         'width': '720px', 'float': 'left'}),
-], style={'float': 'left', 'width': '900px', 'margin': '0 auto'})
+    html.Div(id='processedTextData', style={'display': 'none'}, children='{}'),
+], style={'float': 'left', 'width': '720px', 'margin': '0 auto'})
+
 
 def process_sample(learn: RNNLearner, sample_raw: str) -> Tuple[str,
     Dict[str, float], pd.DataFrame]:
@@ -45,14 +58,17 @@ def process_sample(learn: RNNLearner, sample_raw: str) -> Tuple[str,
     probas = to_np(results[2])
     classes_probas = {str(c):p for c,p in zip(learn.data.train_ds.y.classes, probas)}
     weights = to_np(learn.model[1].attn.last_weights.squeeze())
-    features = to_np(learn.model[1].attn.last_features.squeeze())
+    features = to_np(learn.model[1].attn.last_features.squeeze(0))
 
     tokens = proc.process_one(sample)
     weights = weights / weights.max() # highest one always 1
 
-    single_text_df = pd.DataFrame([pd.Series(tokens), pd.Series(weights), pd.Series(features)]).T
-    single_text_df.columns =['word', 'weight', 'sentiment']
 
+    feats_df = pd.DataFrame(features)
+    feats_df.columns = 'feat_' + feats_df.columns.astype(str)
+    single_text_df = pd.concat([pd.Series(tokens, name='word'),
+                                   pd.Series(weights, name='weight'),
+                                   feats_df], axis=1)
     return decision, classes_probas, single_text_df
 
 def render_word(word: str, sentiment: float, att_weight: float) -> html.Span:
@@ -83,10 +99,28 @@ def render_probabilities(probas: Dict[str, float]):
             margin={'l': 20, 'b': 20, 't': 30, 'r': 0},
             height=200,
             width=400,
-            showlegend=False
+            showlegend=False,
             )
         )
     return figure
+
+@app.callback(Output('attentionWeightsDiv', component_property='children'),
+    [Input('processedTextData', 'children'),
+    Input('featureNumberSlider', 'value')]
+)
+def display_attention(att_json, feat_number):
+    att_df = pd.read_json(att_json).sort_index()
+    if att_df.empty:
+        return ''
+    att_df = att_df.assign(sentiment = att_df.loc[:, 'feat_' + str(feat_number)])
+    att_df.sentiment *= 15
+    att_df.sentiment += 50
+    # features = ((features - features.mean()) / features.std()) * 15 + 50
+    att_df.sentiment = att_df.sentiment.clip(0, 100)
+    # red is 0, yellow 50, green 100
+    att_word_spans = [render_word(r.word, r.sentiment, r.weight) for r in att_df.itertuples()]
+    att_with_spaces = list(itertools.chain(*zip(att_word_spans, [' '] * len(att_word_spans))))
+    return att_with_spaces
 
 
 def main():
@@ -99,25 +133,24 @@ def main():
     model_dir = results_dir / args.run_id
     learner = load_learner(model_dir, 'learner.pkl')  # TODO: move paths etc to a config
 
+    assert type(learner.model[1].attn) == sequence_aggregations.BranchingAttentionAggregation
+    num_features = learner.model[1].attn.agg_dim
+    featureNumberSlider.max = num_features - 1
+
+
+
     @app.callback(
-        [Output('decisionDiv', component_property='children'),
-        Output('probabilitiesGraph', component_property='figure'),
-        Output('attentionWeightsDiv', component_property='children')],
+        [Output('decisionDiv', 'children'),
+        Output('probabilitiesGraph', 'figure'),
+        Output('processedTextData', 'children')],
         [Input('submitButton', 'n_clicks')],
         state=[State(component_id='userText', component_property='value')]
     )
     def update_output_div(_, input_value):
         if not input_value:
-            return render_decision(None), render_probabilities({}), ''
+            return render_decision(None), render_probabilities({}), '{}'
         decision, probas, att_df = process_sample(learner, input_value)
-        att_df.sentiment *= 15
-        att_df.sentiment += 50
-        # features = ((features - features.mean()) / features.std()) * 15 + 50
-        att_df.sentiment = att_df.sentiment.clip(0, 100)
-        # red is 0, yellow 50, green 100
-        att_word_spans = [render_word(r.word, r.sentiment, r.weight) for r in att_df.itertuples()]
-        att_with_spaces = list(itertools.chain(*zip(att_word_spans, [' '] * len(att_word_spans))))
-        return render_decision(decision), render_probabilities(probas), att_with_spaces
+        return render_decision(decision), render_probabilities(probas), att_df.to_json()
 
 # TODO: rescaling and flipping sentiment as parameters
 # TODO; choosing which feature to analyze
