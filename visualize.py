@@ -52,9 +52,11 @@ app.layout = html.Div(id='mainContainer', children=[
     html.Div(id='attentionWeightsDiv', children="Processed text will appear here"),
     html.Div(children=[
         html.P(children="""Opacity of the color behind each token means the
-        attention weight associated with it. Hue marks the value of a
+        attention weight associated with it. Hue denotes the value of a
         feature calculated for that token, in red-to-green scale. It might
-        be easily interpretable (e.g. as sentiment), but does not have to be.""")
+        be easily interpretable (e.g. as sentiment), but does not have to be.
+        If more than one feature is calculated (agg_dim > 1), the top slider can
+        be used to select the feature to show.""")
         ], className='row'),
     html.Div(children=[
         dcc.Graph(id='probabilitiesGraph', config={'displayModeBar': False}),
