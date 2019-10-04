@@ -157,6 +157,7 @@ def main():
     parser.add_argument('--cpu', action='store_true', default=False, help='Run on CPU only')
     parser.add_argument('--port', default='8050', help='Port to run the webserver on')
     parser.add_argument('--ip', default='localhost', help='IP to bind. To make the server available from other hosts use "0.0.0.0" (not recommended)')
+    parser.add_argument('--debug', action='store_true', default=False, help='Run Dash in debug mode')
     args = parser.parse_args()
     if args.cpu:
         defaults.device = torch.device('cpu')
@@ -188,7 +189,7 @@ def main():
 # TODO: disable sentiment or attention
 # TODO: choose between models
 
-    app.run_server(host=args.ip, port=args.port)
+    app.run_server(host=args.ip, port=args.port, debug=args.debug)
 
 if __name__ == '__main__':
     main()
