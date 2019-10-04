@@ -32,11 +32,19 @@ div.row {
   margin: 20px auto;
 }
 
+#instructionManual {
+  text-align: justify;
+}
+
+div.rowWithSlider {
+  padding-bottom: 10px;
+}
+
 #attentionWeightsDiv {
   border: 1px solid black;
   width: 100%;
   min-height: 100px;
-  margin-top: 25px;
+  margin-top: 15px;
 }
 
 #mainContainer {

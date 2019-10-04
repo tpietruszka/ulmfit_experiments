@@ -43,20 +43,40 @@ app.layout = html.Div(id='mainContainer', children=[
     html.Label(htmlFor='featureNumberSlider',
                children=["Which feature to show? (Out of ", numFeaturesSpan, ")"]),
     featureNumberSlider
-        ], className='row'),
+        ], className='row rowWithSlider'),
     html.Div(children=[
         html.Label(htmlFor='colorRangeSlider', children="Map this range of values into [red, green]:"),
         dcc.RangeSlider('colorRangeSlider', min=-15, max=15, value=[-3, 3], pushable=1,
                         marks={m: str(m) for m in range(-15, 18, 3)})
+        ], className='row rowWithSlider'),
+    html.Div(children=[
+        html.Label(htmlFor='visualizeCheckbox', children="Show:"),
+        dcc.Checklist(
+            options=[
+                {'label': 'Attention weights', 'value': 'weights'},
+                {'label': 'Feature values', 'value': 'features'},
+            ],
+            value=['weights', 'features'],
+            id='visualizeCheckbox')
         ], className='row'),
+
     html.Div(id='attentionWeightsDiv', children="Processed text will appear here"),
     html.Div(children=[
-        html.P(children="""Opacity of the color behind each token means the
-        attention weight associated with it. Hue denotes the value of a
-        feature calculated for that token, in red-to-green scale. It might
-        be easily interpretable (e.g. as sentiment), but does not have to be.
+        dcc.Markdown(children="""
+        **Opacity** of the color behind each token means the
+        attention weight associated with it.
+
+        **Hue** denotes the value of a feature calculated for that token,
+        **considering its left context**, in red-to-green scale. It might
+        be easily interpretable (e.g. as sentiment), but does not have to be,
+        especially if there are more features.
+
         If more than one feature is calculated (agg_dim > 1), the top slider can
-        be used to select the feature to show.""")
+        be used to select the feature to show.
+
+        To examine just the attention weights or just the feature values for all
+        tokens, uncheck the unnecessary checkbox above.
+        """, id="instructionManual")
         ], className='row'),
     html.Div(children=[
         dcc.Graph(id='probabilitiesGraph', config={'displayModeBar': False}),
@@ -133,17 +153,24 @@ def render_probabilities(probas: Dict[str, float]):
 @app.callback(Output('attentionWeightsDiv', component_property='children'),
     [Input('processedTextData', 'children'),
     Input('featureNumberSlider', 'value'),
-    Input('colorRangeSlider', 'value')]
+    Input('colorRangeSlider', 'value'),
+    Input('visualizeCheckbox', 'value')]
 )
-def display_attention(att_json, feat_number, color_range):
+def display_attention(att_json, feat_number, color_range, visualize_what):
     att_df = pd.read_json(att_json).sort_index()
     if att_df.empty:
         return ''
     att_df = att_df.assign(feature = att_df.loc[:, 'feat_' + str(feat_number)])
 
-    crange = color_range[1] - color_range[0]
-    att_df = att_df.assign(feature_color =
-                           ((att_df.feature - color_range[0]) / crange * 100).clip(0,100))
+    if 'features' in visualize_what:
+        crange = color_range[1] - color_range[0]
+        att_df = att_df.assign(feature_color =
+                               ((att_df.feature - color_range[0]) / crange * 100).clip(0,100))
+    else:
+        att_df = att_df.assign(feature_color = 100)
+
+    if 'weights' not in visualize_what:
+        att_df.loc[:, 'weight'] = 1
     # features = ((features - features.mean()) / features.std()) * 15 + 50
     # red is 0, yellow 50, green 100
     att_word_spans = [render_word(r.word, r.weight, r.feature, r.feature_color) for r in att_df.itertuples()]
@@ -186,7 +213,6 @@ def main():
         return render_decision(decision), render_probabilities(probas), att_df.to_json()
 
 # TODO: histogram of the sentiment
-# TODO: disable sentiment or attention
 # TODO: choose between models
 
     app.run_server(host=args.ip, port=args.port, debug=args.debug)
