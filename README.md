@@ -167,3 +167,14 @@ Enter a text to process (new line ends a text, Ctrl-C to exit): This was such a 
 Predicted class: 1
 Predicted probabilities of all classes: 0.009532124,0.99046785
 ```
+
+## Deploying `visualize.py` using Gunicorn
+
+Command-line options cannot be passed to the script, using env variables instead.
+Variables such as ip and port are meaningless - they have to be set in gunicorn.
+
+Example run:
+
+```
+VIS_CPU=True VIS_RUN_ID="imdb_full_agg_1" gunicorn visualize:app.server -b 0.0.0.0:8050
+```

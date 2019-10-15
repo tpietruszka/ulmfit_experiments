@@ -4,6 +4,7 @@ from typing import *
 import os
 import sys
 import pandas as pd
+from dataclasses import dataclass
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
@@ -18,6 +19,37 @@ from cli_common import results_dir
 import torch
 
 # external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
+@dataclass
+class AppConfig:
+    run_id: str
+    cpu: bool=False  # run only on CPU
+
+    # section only relevant when running the development server
+    port: Optional[int]=8050
+    ip: str='localhost'
+    debug: bool=False
+
+    @classmethod
+    def from_console(cls):
+        parser = argparse.ArgumentParser(description='Load a trained model and score texts')
+        parser.add_argument('run_id', type=str, help='Model to load. Corresponds to a directory within "./trained_models/"')
+        parser.add_argument('--cpu', action='store_true', help='Run on CPU only')
+        parser.add_argument('--port', help='Port to run the webserver on')
+        parser.add_argument('--ip', help='IP to bind. To make the server available from other hosts use "0.0.0.0" (not recommended)')
+        parser.add_argument('--debug', action='store_true', help='Run Dash in debug mode')
+        parsed = parser.parse_args()
+        return cls(**{k:v for k,v in vars(parsed).items() if v is not None})
+
+    @classmethod
+    def from_env(cls):
+        params_dict = {}
+        for name in cls.__dataclass_fields__.keys():
+            name_env = 'VIS_' + name.upper()
+            if name_env in os.environ.keys():
+                params_dict[name] = os.environ[name_env]
+        return cls(**params_dict)
+
 
 max_text_len = 5000
 
@@ -113,7 +145,7 @@ def process_sample(learn: RNNLearner, sample_raw: str) -> Tuple[str,
     tokens = proc.process_one(sample)
     print(f'Processed {len(tokens)} tokens in {eval_time}')
     weights = weights / weights.max() # highest one always 1
-    
+
     feats_df = pd.DataFrame(features)
     feats_df.columns = 'feat_' + feats_df.columns.astype(str)
     single_text_df = pd.concat([pd.Series(tokens, name='word'),
@@ -185,14 +217,8 @@ def display_attention(att_json, feat_number, color_range, visualize_what):
     return att_with_spaces
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Load a trained model and score texts')
-    parser.add_argument('run_id', type=str, help='Model to load. Corresponds to a directory within "./trained_models/"')
-    parser.add_argument('--cpu', action='store_true', default=False, help='Run on CPU only')
-    parser.add_argument('--port', default='8050', help='Port to run the webserver on')
-    parser.add_argument('--ip', default='localhost', help='IP to bind. To make the server available from other hosts use "0.0.0.0" (not recommended)')
-    parser.add_argument('--debug', action='store_true', default=False, help='Run Dash in debug mode')
-    args = parser.parse_args()
+def setup_app(args: argparse.Namespace):
+
     if args.cpu:
         defaults.device = torch.device('cpu')
     model_dir = results_dir / args.run_id
@@ -203,8 +229,6 @@ def main():
     featureNumberSlider.max = num_features - 1
     featureNumberSlider.marks = {m: str(m) for m in range(num_features)}
     numFeaturesSpan.children = num_features
-
-
 
     @app.callback(
         [Output('decisionDiv', 'children'),
@@ -222,7 +246,15 @@ def main():
 # TODO: histogram of the sentiment
 # TODO: choose between models
 
-    app.run_server(host=args.ip, port=args.port, debug=args.debug)
 
 if __name__ == '__main__':
-    main()
+    args = AppConfig.from_console()
+    print("Config:")
+    print(args)
+    setup_app(args)
+    app.run_server(host=args.ip, port=args.port, debug=args.debug)
+else:
+    args = AppConfig.from_env()
+    print("Config:")
+    print(args)
+    setup_app(args)
