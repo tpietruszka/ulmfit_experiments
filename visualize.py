@@ -101,7 +101,9 @@ def process_sample(learn: RNNLearner, sample_raw: str) -> Tuple[str,
     if len(sample) > max_text_len:
         sample = sample[:max_text_len]  # trim extremely long text
     proc = learn.data.train_ds.x.processor[0]
+    time_before = pd.Timestamp.now()
     results = learn.predict(sample)
+    eval_time = (pd.Timestamp.now() - time_before)
     decision = str(results[0])
     probas = to_np(results[2])
     classes_probas = {str(c):p for c,p in zip(learn.data.train_ds.y.classes, probas)}
@@ -109,9 +111,9 @@ def process_sample(learn: RNNLearner, sample_raw: str) -> Tuple[str,
     features = to_np(learn.model[1].attn.last_features.squeeze(0))
 
     tokens = proc.process_one(sample)
+    print(f'Processed {len(tokens)} tokens in {eval_time}')
     weights = weights / weights.max() # highest one always 1
-
-
+    
     feats_df = pd.DataFrame(features)
     feats_df.columns = 'feat_' + feats_df.columns.astype(str)
     single_text_df = pd.concat([pd.Series(tokens, name='word'),
