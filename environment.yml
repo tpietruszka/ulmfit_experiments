@@ -77,6 +77,7 @@ dependencies:
   - greenlet=0.4.15=py36h7b6447c_0
   - gst-plugins-base=1.14.0=hbbd80ab_1
   - gstreamer=1.14.0=hb453b48_1
+  - gunicorn=19.9.0=py36_0
   - h5py=2.8.0=py36h989c5e5_3
   - harfbuzz=1.8.8=hffaf4a1_0
   - hdf5=1.10.2=hba1933b_1
@@ -338,4 +339,3 @@ dependencies:
     - xmltodict==0.11.0
     - yarg==0.1.9
 prefix: /home/tomasz/anaconda3/envs/ulmfit_experiments
-
