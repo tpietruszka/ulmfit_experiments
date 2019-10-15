@@ -19,6 +19,8 @@ import torch
 
 # external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
+max_text_len = 5000
+
 app = dash.Dash('Attention visualization')
 @app.server.route('/static/<path:path>')
 def static_file(path):
@@ -36,7 +38,8 @@ app.layout = html.Div(id='mainContainer', children=[
     ),
     html.H1(children='Attention visualization'),
     html.Div(id='inputRow', className='row', children=[
-        dcc.Textarea(id='userText', placeholder='Enter some text to analyze'),
+        dcc.Textarea(id='userText', placeholder='Enter some text to analyze',
+                     maxLength=max_text_len),
         html.Button('Evaluate', id='submitButton'),
         ]),
     html.Div(children=[
@@ -95,6 +98,8 @@ def process_sample(learn: RNNLearner, sample_raw: str) -> Tuple[str,
     Process a sample using a fastai learner, collect results and attention
     """
     sample = 'xxbos ' + sample_raw
+    if len(sample) > max_text_len:
+        sample = sample[:max_text_len]  # trim extremely long text
     proc = learn.data.train_ds.x.processor[0]
     results = learn.predict(sample)
     decision = str(results[0])
