@@ -168,7 +168,9 @@ Predicted class: 1
 Predicted probabilities of all classes: 0.009532124,0.99046785
 ```
 
-## Deploying `visualize.py` using Gunicorn
+## Webserver deployment
+
+### Deploying `visualize.py` using Gunicorn
 
 Command-line options cannot be passed to the script, using env variables instead.
 Variables such as ip and port are meaningless - they have to be set in gunicorn.
@@ -177,4 +179,18 @@ Example run:
 
 ```
 VIS_CPU=True VIS_RUN_ID="imdb_full_agg_1" gunicorn visualize:app.server -b 0.0.0.0:8050
+```
+
+### Docker, docker-compose
+
+The `visualize.py` tool can be Dockerized, needs to mount a volume with the
+`trained_models` dir contents and optionally a nginx proxy dealing with SSL.
+
+An example config is provided in `docker-compose-visualize.yml`.
+It should be adapted with the correct location of the `trained_models` dir,
+and network name of the nginx proxy's network should be used.
+
+Example run:
+```
+docker-compose -f docker-compose-visualize.yml up --build
 ```

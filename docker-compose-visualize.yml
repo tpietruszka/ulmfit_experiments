@@ -1,0 +1,26 @@
+version: "2"
+
+# meant to be used with a nginx + letsencrypt, this way it can also easily share the host with other services.
+# 3 container approach: https://github.com/JrCs/docker-letsencrypt-nginx-proxy-companion/blob/master/docs/Docker-Compose.md
+# VIRTUAL_* and LETSENCRYPT_* variables are for that, network should be set to the same one as the nginx
+
+services:
+  ulmfit-visualize:
+    restart: always
+    image: ulmfit-visualize
+    container_name: ulmfit-visualize
+    build:
+      dockerfile: ./Dockerfile_visualize_cpu
+      context: ./
+    volumes:
+      - "./trained_models:/app/ulmfit_experiments/trained_models"
+    ports:
+      - "80:80"
+    environment:
+      - VIS_RUN_ID=imdb_full_agg_1
+      - VIS_CPU=True
+      - GUNICORN_BIND=0.0.0.0:80
+      - VIRTUAL_HOST=ulmfit.purecode.pl
+      - VIRTUAL_PORT=80
+      - LETSENCRYPT_HOST=ulmfit.purecode.pl
+      - LETSENCRYPT_EMAIL=tomek.pietruszka@gmail.com

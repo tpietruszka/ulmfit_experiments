@@ -56,7 +56,7 @@ max_text_len = 5000
 app = dash.Dash('Attention visualization')
 @app.server.route('/static/<path:path>')
 def static_file(path):
-    static_folder = os.path.join(os.getcwd(), 'static')
+    static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     return send_from_directory(static_folder, path)
 
 featureNumberSlider = dcc.Slider(id='featureNumberSlider', min=0, max=0, step=1,

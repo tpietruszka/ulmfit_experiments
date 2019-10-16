@@ -1,0 +1,21 @@
+FROM continuumio/miniconda:latest
+
+WORKDIR /app/ulmfit_experiments
+
+COPY environment_cpu.yml ./
+RUN conda env create -f environment_cpu.yml -n ulmfit && conda clean -afy
+RUN echo "source activate ulmfit" > ~/.bashrc
+ENV PATH /opt/conda/envs/ulmfit/bin:$PATH
+
+
+COPY *.py ./
+COPY static ./static
+
+# PYTHONUNBUFFERED-otherwise logs get lost if running with docker-compose up -d
+ENV PYTHONUNBUFFERED=1
+
+# cpu-only environment, so force using only cpu
+ENV VIS_CPU=True
+
+RUN mkdir ./trained_models
+CMD gunicorn visualize:app.server -b ${GUNICORN_BIND}
