@@ -13,14 +13,25 @@ services:
       dockerfile: ./Dockerfile_visualize_cpu
       context: ./
     volumes:
-      - "./trained_models:/app/ulmfit_experiments/trained_models"
-    ports:
-      - "80:80"
+      - "./trained_models:/app/ulmfit_experiments/trained_models:ro"
+    networks:
+      - workingbikesbackend_default
     environment:
       - VIS_RUN_ID=imdb_full_agg_1
       - VIS_CPU=True
-      - GUNICORN_BIND=0.0.0.0:80
+      - GUNICORN_HOST=0.0.0.0
+      - GUNICORN_PORT=80
       - VIRTUAL_HOST=ulmfit.purecode.pl
       - VIRTUAL_PORT=80
       - LETSENCRYPT_HOST=ulmfit.purecode.pl
       - LETSENCRYPT_EMAIL=tomek.pietruszka@gmail.com
+
+# if nginx+letsencrtypt proxy is present, set the name below to the appropriate
+# network name; otherwise, remove the following section
+networks:
+  workingbikesbackend_default:
+    external: true
+# networks:
+#   default:
+#     external:
+#       name: workingbikesbackend_default

@@ -17,5 +17,7 @@ ENV PYTHONUNBUFFERED=1
 # cpu-only environment, so force using only cpu
 ENV VIS_CPU=True
 
+EXPOSE 80
+
 RUN mkdir ./trained_models
-CMD gunicorn visualize:app.server -b ${GUNICORN_BIND}
+CMD gunicorn visualize:app.server -b ${GUNICORN_HOST}:${GUNICORN_PORT} -w 2
