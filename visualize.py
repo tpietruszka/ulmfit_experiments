@@ -71,7 +71,9 @@ app.layout = html.Div(id='mainContainer', children=[
     html.H1(children='Attention visualization'),
     html.Div(id='inputRow', className='row', children=[
         dcc.Textarea(id='userText', placeholder='Enter some text to analyze',
-                     maxLength=max_text_len),
+                     maxLength=max_text_len,
+                     value="I do not consider it a good movie. This movie had the potential to be a decent thriller, but it was hampered by only having about twenty minutes worth of good script, which was mostly used up in the beginning. After that holes started to appear in the story that one could drive a truck through. The movie followed a descending curve from good to ordinary to bad to ludicrous by the time it concluded. It's not recommended.",
+                     ),
         html.Button('Evaluate', id='submitButton'),
         ]),
     html.Div(children=[
