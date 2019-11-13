@@ -17,6 +17,9 @@ metrics_registry = {'accuracy': accuracy, 'f1': FBeta(beta=1)}
 callbacks_registry = {'auroc': AUROC,
                       'average_precision_score': AveragePrecisionScore}
 
+# previously set in fastai/text/learner.py then deleted -> pinning here
+default_dropout = {'language': np.array([0.25, 0.1, 0.2, 0.02, 0.15]),
+                   'classifier': np.array([0.4,0.5,0.05,0.3,0.4])}
 
 def remove_urls(t: str) -> str:
     return re.sub(r'http\S+', URL_TOKEN, t)
@@ -211,13 +214,13 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
         num_classes = data_bunch.c
         vocab_size = len(data_bunch.vocab.itos)
         lin_ftrs = list(self.lin_ftrs) + [num_classes]
-        rnn_enc = MultiBatchRNNCore(self.bptt, self.max_len, vocab_size, self.emb_sz, self.nh, self.nl,
-                                    pad_token=PAD_TOKEN_ID, input_p=encoder_dps[0], weight_p=encoder_dps[1],
-                                    embed_p=encoder_dps[2], hidden_p=encoder_dps[3])
+        enc_single = AWD_LSTM(vocab_size, self.emb_sz, self.nh, self.nl, pad_token=PAD_TOKEN_ID, input_p=encoder_dps[0],
+                              weight_p=encoder_dps[1], embed_p=encoder_dps[2], hidden_p=encoder_dps[3])
+        rnn_enc = MultiBatchEncoder(self.bptt, self.max_len, enc_single)
         classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps,
                                                                self.rnn_output_layers)
         model = SequentialRNN(rnn_enc, classifier)
-        learn = RNNLearner(data_bunch, model, self.bptt, split_func=rnn_classifier_split, true_wd=self.true_wd,
+        learn = RNNLearner(data_bunch, model, split_func=awd_lstm_clas_split, true_wd=self.true_wd,
                            metrics=metrics)
         learn.callback_fns += [StatsRecorder]
         if self.load_best_validation_score:
@@ -226,30 +229,30 @@ class ExperimentCls(metaclass=RegisteredAbstractMeta, is_registry=True):
             learn.callback_fns += callbacks
         return learn
 
-    def get_bidir_learner(self, data_bunch: DataBunch,
-                          agg_model: sequence_aggregations.Aggregation,
-                          metrics: Optional[MetricFuncList] = None,
-                          callbacks: Optional[List[Callback]] = None) -> 'RNNLearner':
-        assert not self.backwards
-        encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
-        num_classes = data_bunch.c
-        vocab_size = len(data_bunch.vocab.itos)
-        lin_ftrs = list(self.lin_ftrs) + [num_classes]
-        enc_parts = [MultiBatchRNNCore(self.bptt, self.max_len, vocab_size, self.emb_sz, self.nh, self.nl,
-                                       pad_token=PAD_TOKEN_ID, input_p=encoder_dps[0], weight_p=encoder_dps[1],
-                                       embed_p=encoder_dps[2], hidden_p=encoder_dps[3]) for _ in range(2)]
-        enc = classifiers.BidirEncoder(*enc_parts)
-        classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps,
-                                                               self.rnn_output_layers)
-        model = SequentialRNN(enc, classifier)
-        learn = RNNLearner(data_bunch, model, self.bptt, split_func=classifiers.bidir_rnn_classifier_split,
-                           true_wd=self.true_wd, metrics=metrics)
-        learn.callback_fns += [StatsRecorder]
-        if self.load_best_validation_score:
-            learn.callback_fns += [partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
-        if callbacks:
-            learn.callback_fns += callbacks
-        return learn
+    # def get_bidir_learner(self, data_bunch: DataBunch,
+    #                       agg_model: sequence_aggregations.Aggregation,
+    #                       metrics: Optional[MetricFuncList] = None,
+    #                       callbacks: Optional[List[Callback]] = None) -> 'RNNLearner':
+    #     assert not self.backwards
+    #     encoder_dps = [x * self.drop_mult for x in self.encoder_dps]
+    #     num_classes = data_bunch.c
+    #     vocab_size = len(data_bunch.vocab.itos)
+    #     lin_ftrs = list(self.lin_ftrs) + [num_classes]
+    #     enc_parts = [MultiBatchRNNCore(self.bptt, self.max_len, vocab_size, self.emb_sz, self.nh, self.nl,
+    #                                    pad_token=PAD_TOKEN_ID, input_p=encoder_dps[0], weight_p=encoder_dps[1],
+    #                                    embed_p=encoder_dps[2], hidden_p=encoder_dps[3]) for _ in range(2)]
+    #     enc = classifiers.BidirEncoder(*enc_parts)
+    #     classifier = classifiers.SequenceAggregatingClassifier(agg_model, lin_ftrs, self.classifier_dps,
+    #                                                            self.rnn_output_layers)
+    #     model = SequentialRNN(enc, classifier)
+    #     learn = RNNLearner(data_bunch, model, self.bptt, split_func=classifiers.bidir_rnn_classifier_split,
+    #                        true_wd=self.true_wd, metrics=metrics)
+    #     learn.callback_fns += [StatsRecorder]
+    #     if self.load_best_validation_score:
+    #         learn.callback_fns += [partial(SaveModelCallback, every='improvement', name=CLS_BEST_FILE)]
+    #     if callbacks:
+    #         learn.callback_fns += callbacks
+    #     return learn
 
     def get_aggregation(self) -> 'Aggregation':
         agg_inp_size = 0
