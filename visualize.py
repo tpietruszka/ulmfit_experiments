@@ -72,7 +72,7 @@ app.layout = html.Div(id='mainContainer', children=[
     html.Div(id='inputRow', className='row', children=[
         dcc.Textarea(id='userText', placeholder='Enter some text to analyze',
                      maxLength=max_text_len,
-                     value="Great cast and director set my expectations very high. However, I do not consider it a good movie. This movie had the potential to be a decent thriller, but it was hampered by only having about twenty minutes worth of good script, which was mostly used up in the beginning. After that holes started to appear in the story that one could drive a truck through. The movie followed a descending curve from good to ordinary to bad to ludicrous by the time it concluded. It's not recommended.",
+                     value="Great cast and director set my expectations very high. However, I do not consider it a good movie. It had the potential to be a decent thriller, but it was hampered by only having about twenty minutes worth of good script, which was mostly used up in the beginning. After that holes started to appear in the story that one could drive a truck through. The movie followed a descending curve from good to ordinary to bad to ludicrous by the time it concluded. It's not recommended.",
                      ),
         html.Button('Evaluate', id='submitButton'),
         ]),
@@ -92,6 +92,7 @@ app.layout = html.Div(id='mainContainer', children=[
             options=[
                 {'label': 'Attention weights', 'value': 'weights'},
                 {'label': 'Feature values', 'value': 'features'},
+                {'label': 'Auxiliary tokens', 'value': 'extra_tokens'},
             ],
             value=['weights', 'features'],
             id='visualizeCheckbox')
@@ -108,11 +109,14 @@ app.layout = html.Div(id='mainContainer', children=[
         be easily interpretable (e.g. as sentiment), but does not have to be,
         especially if there are more features.
 
-        If more than one feature is calculated (agg_dim > 1), the top slider can
-        be used to select the feature to show.
-
         To examine just the attention weights or just the feature values for all
         tokens, uncheck the unnecessary checkbox above.
+        
+        Some auxiliary tokens were added to denote e.g. capitalization of the 
+        next word ("xxmaj"), beginning of sequence ("xxbos"), words repeated
+        more than 3 times ("xxwrep NUMBER"). Most common ones are not shown
+        by default, but can be restored using the "auxiliary tokens" checkbox.
+        
         """, id="instructionManual")
         ], className='row'),
     html.Div(children=[
@@ -214,6 +218,13 @@ def display_attention(att_json, feat_number, color_range, visualize_what):
         att_df.loc[:, 'weight'] = 1
     # features = ((features - features.mean()) / features.std()) * 15 + 50
     # red is 0, yellow 50, green 100
+
+    if 'extra_tokens' not in visualize_what:
+        extra_tokens = ['xxmaj', 'xxup', 'xxbos']  # most common tokenization artifacts, easy to "undo"
+        att_df.loc[(att_df.word == "xxmaj").shift(1).fillna(False), 'word'] = att_df.word.str.capitalize()
+        att_df.loc[(att_df.word == "xxup").shift(1).fillna(False), 'word'] = att_df.word.str.upper()
+        att_df = att_df.loc[~att_df.word.isin(extra_tokens)]
+
     att_word_spans = [render_word(r.word, r.weight, r.feature, r.feature_color) for r in att_df.itertuples()]
     att_with_spaces = list(itertools.chain(*zip(att_word_spans, [' '] * len(att_word_spans))))
     return att_with_spaces
