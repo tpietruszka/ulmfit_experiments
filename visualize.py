@@ -76,16 +76,22 @@ app.layout = html.Div(id='mainContainer', children=[
                      ),
         html.Button('Evaluate', id='submitButton'),
         ]),
-    html.Div(children=[
-    html.Label(htmlFor='featureNumberSlider',
-               children=["Which feature to show? (Out of ", numFeaturesSpan, ")"]),
-    featureNumberSlider
-        ], className='row rowWithSlider'),
-    html.Div(children=[
-        html.Label(htmlFor='colorRangeSlider', children="Map this range of values into [red, green]:"),
-        dcc.RangeSlider('colorRangeSlider', min=-15, max=15, value=[-3, 3], pushable=1,
-                        marks={m: str(m) for m in range(-15, 18, 3)})
-        ], className='row rowWithSlider'),
+    html.Details([
+        html.Summary('Advanced settings'),
+        html.Div(children=[
+            html.Div(children=[
+                html.Label(htmlFor='featureNumberSlider',
+                           children=["Which feature to show? (Out of ", numFeaturesSpan, ") <br />"
+                                     "Only relevant if the model calculates more than 1 AGG feature (agg dim >1)"]),
+                featureNumberSlider
+            ], className='row rowWithSlider'),
+            html.Div(children=[
+                html.Label(htmlFor='colorRangeSlider', children="Map this range of values into [red, green]:"),
+                dcc.RangeSlider('colorRangeSlider', min=-15, max=15, value=[-3, 3], pushable=1,
+                                marks={m: str(m) for m in range(-15, 18, 3)})
+            ], className='row rowWithSlider'),
+        ])
+    ]),
     html.Div(children=[
         html.Label(htmlFor='visualizeCheckbox', children="Show:"),
         dcc.Checklist(
