@@ -1,0 +1,54 @@
+{
+  "type": "Poleval1",
+  "params": {
+    "dataset_path": "../data/poleval/",
+    "encoder_subdir": "encoder_tweets_spm_basic",
+    "training_phases": [
+      {
+        "freeze_to": -1,
+        "cyc_len": 1,
+        "lr_max_last": 0.02
+      },
+      {
+        "freeze_to": -2,
+        "cyc_len": 1,
+        "lr_max_last": 0.01
+      },
+      {
+        "freeze_to": -3,
+        "cyc_len": 1,
+        "lr_max_last": 0.005
+      },
+      {
+        "freeze_to": -6,
+        "cyc_len": 6,
+        "lr_max_last": 0.001
+      }
+    ],
+    "cv_num_splits": 10,
+    "calc_test_score": true,
+    "calc_test_extra_metrics": [
+      "average_precision_score",
+      "roc_auc_score"
+    ],
+    "cv_fold_num": 0,
+    "drop_mult": 1,
+    "load_best_validation_score": false,
+    "new_split": true,
+    "new_split_train_fraction": 0.906,
+    "new_split_val_fraction": 0.01,
+    "rnn_output_layers": [
+      -1
+    ],
+    "aggregation_class": "BranchingAttentionAggregation",
+    "aggregation_params": {
+      "att_hid_layers": [
+        50
+      ],
+      "att_dropouts": 0,
+      "agg_dim": 10
+    },
+    "lin_ftrs": [],
+    "subsample_id": 1
+  }
+}

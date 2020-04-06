@@ -1,0 +1,42 @@
+{
+  "type": "Imdb",
+  "params": {
+    "dataset_path": "../data/imdb/",
+    "encoder_subdir": "encoder_1",
+    "training_phases": [
+      {
+        "freeze_to": -1,
+        "cyc_len": 1,
+        "lr_max_last": 0.02
+      },
+      {
+        "freeze_to": -2,
+        "cyc_len": 1,
+        "lr_max_last": 0.01
+      },
+      {
+        "freeze_to": -3,
+        "cyc_len": 1,
+        "lr_max_last": 0.005
+      },
+      {
+        "freeze_to": -6,
+        "cyc_len": 6,
+        "lr_max_last": 0.001
+      }
+    ],
+    "aggregation_class": "BranchingAttentionAggregation",
+    "aggregation_params": {
+      "att_hid_layers": [
+        50
+      ],
+      "att_dropouts": 0.0,
+      "agg_dim": 1
+    },
+    "lin_ftrs": [],
+    "calc_test_score": true,
+    "cv_num_splits": 100,
+    "cv_fold_num": 0,
+    "load_best_validation_score": false
+  }
+}
