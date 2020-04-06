@@ -2,13 +2,27 @@
 
 This project was created to queue, run and store results of experiments -
 attempts to improve the ULMFiT algorithm, focusing on the classifier head
-architecture.
+architecture. The original experimental setup was based on the 
+`ulmfit-multilingual` project - now [MultiFiT](https://github.com/n-waves/multifit).
+
+A more up-to-date, more polished version of the code & experimental environment, 
+but without the visualization functionality, can be found in the 
+[ulmfit_attention](https://github.com/tpietruszka/ulmfit_attention)
+repository.
 
 Currently, this project can handle 3 different classification tasks on their
-corresponding datasets: "IMDB", "Poleval Cyberbullying Detection" and "Fact
-Checking Question Classification". For each of them, there is a subfolder within
-`./data`, containing labeled training and test datasets, as well as one
-language model for each, adapted for the specific domain.
+corresponding datasets: "IMDB", "Poleval 2019 Cyberbullying Detection" and "Fact
+Checking Question Classification" (SemEval 2019). For each of them, there is a subfolder within
+`./data`. Language models, fine-tuned on appropriate text corpora, can be downloaded:
+
+- [imdb](https://static.purecode.pl/ulmfit_experiments/data/imdb.tar.xz)
+- [poleval](https://static.purecode.pl/ulmfit_experiments/data/poleval.tar.xz)
+- [fact_checking](https://static.purecode.pl/ulmfit_experiments/data/fact_checking.tar.xz)
+
+To train classifiers, datasets have to be downloaded and put into `train.csv` 
+and `test.csv` files, without headers, classification label as the first column.
+
+One example pre-trained classifier (for IMDB) is shared - described in the visualization section. 
 
 Simple scripts have been added to enable training and evaluating classifiers
 without setting up a database and preparing dedicated notebooks.
@@ -16,6 +30,7 @@ without setting up a database and preparing dedicated notebooks.
 `visualize.py` lets the user feed text to the model, then inspect attention
 scores associated with each token and features calculated for it. The interface
 is browser-based, the script starts a simple local webserver based on Dash.
+
 
 The primary mode of operation originally was to run
 `python runner.py [storage directory]`, which creates a worker to process a
@@ -48,6 +63,11 @@ the config requires that, and stores several things in
 - a trained model, which can later be used by `cli_deploy.py`.
 
 ### Visualizing attention
+An [online deployment](https://ulmfit.purecode.pl) of the attention visualization
+is available. It uses an example model trained on the IMDB dataset to perform 
+sentiment analysis. The model can be downloaded from 
+[here](https://static.purecode.pl/ulmfit_experiments/trained_models/imdb_full_agg_1.tar.xz)
+and should be unpacked inside the `trained_models` directory.
 
 `python visualize.py [run_id]` loads a given model, and starts a webserver where
 the user can supply texts, see the classification decisions and inspect
