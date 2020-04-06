@@ -1,7 +1,11 @@
 .tooltip {
   position: relative;
   display: inline-block;
-  border-bottom: 1px dotted black;
+  /*border-bottom: 1px dotted black;*/
+  padding: 1px;
+  font-family: arial;
+  font-weight: bold;
+  font-size: 17px;
 }
 
 .tooltip .tooltiptext {
@@ -45,6 +49,7 @@ div.rowWithSlider {
   width: 100%;
   min-height: 100px;
   margin-top: 15px;
+  padding: 10px;
 }
 
 #mainContainer {
