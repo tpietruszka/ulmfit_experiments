@@ -2,7 +2,6 @@ import argparse
 import itertools
 from typing import *
 import os
-import sys
 import pandas as pd
 from dataclasses import dataclass
 import dash
@@ -11,14 +10,15 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 import cli_common
-from ulmfit_experiments import experiments # has to be imported after cli_common
 from ulmfit_experiments import sequence_aggregations
 from fastai.text import learner, load_learner, to_np, defaults
 from fastai.text.learner import RNNLearner
 from cli_common import results_dir
 import torch
 
-# external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+max_text_len = 5000
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
 
 @dataclass
 class AppConfig:
@@ -53,13 +53,14 @@ class AppConfig:
         return cls(**params_dict)
 
 
-max_text_len = 5000
+app = dash.Dash('Attention visualization', external_stylesheets=external_stylesheets)
 
-app = dash.Dash('Attention visualization')
+
 @app.server.route('/static/<path:path>')
 def static_file(path):
     static_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
     return send_from_directory(static_folder, path)
+
 
 featureNumberSlider = dcc.Slider(id='featureNumberSlider', min=0, max=0, step=1,
                                  value=0)
@@ -74,7 +75,7 @@ app.layout = html.Div(id='mainContainer', children=[
     html.H1(children='Attention visualization'),
     html.Div(id='topDescription', children=[
         html.H4(children=[modelDescriptionSpan]),
-        html.P('A recurrent neural network processes the text word by word (token by token) to make the '
+        html.P('A recurrent neural network processes the text word by word (token by token) to make a '
                'classification decision. For each word, its importance and contribution towards the final decision '
                'are calculated. Those values can be inspected below, to better understand the network\'s operation.'
                ),
@@ -96,24 +97,9 @@ app.layout = html.Div(id='mainContainer', children=[
                            "through. The movie followed a descending curve from good to ordinary to bad to ludicrous "
                            "by the time it concluded. It's not recommended.",
                      ),
-        html.Button('Evaluate', id='submitButton'),
+        html.Button('Evaluate', id='submitButton', className='button-primary'),
         ]),
-    html.Details([
-        html.Summary('Advanced settings'),
-        html.Div(children=[
-            html.Div(children=[
-                html.Label(htmlFor='featureNumberSlider',
-                           children=["Which feature to show? (Out of ", numFeaturesSpan, ") <br />"
-                                     "Only relevant if the model calculates more than 1 AGG feature (agg dim >1)"]),
-                featureNumberSlider
-            ], className='row rowWithSlider'),
-            html.Div(children=[
-                html.Label(htmlFor='colorRangeSlider', children="Map this range of values into [red, green]:"),
-                dcc.RangeSlider('colorRangeSlider', min=-15, max=15, value=[-3, 3], pushable=1,
-                                marks={m: str(m) for m in range(-15, 18, 3)})
-            ], className='row rowWithSlider'),
-        ])
-    ]),
+    html.Div(id='attentionWeightsDiv', children="Processed text will appear here"),
     html.Div(children=[
         html.Label(htmlFor='visualizeCheckbox', children="Show:"),
         dcc.Checklist(
@@ -124,9 +110,24 @@ app.layout = html.Div(id='mainContainer', children=[
             ],
             value=['weights', 'features'],
             id='visualizeCheckbox')
-        ], className='row'),
-
-    html.Div(id='attentionWeightsDiv', children="Processed text will appear here"),
+    ], className='row'),
+    html.Details([
+        html.Summary('Advanced settings'),
+        html.Div(children=[
+            html.Div(children=[
+                html.Label(htmlFor='featureNumberSlider',
+                           children=["Which feature to show? (Out of ", numFeaturesSpan, ")", html.Br(),
+                                     "Only relevant if the model calculates more than 1 AGG feature (agg dim >1)"]),
+                featureNumberSlider
+            ], className='row rowWithSlider'),
+            html.Div(children=[
+                html.Label(htmlFor='colorRangeSlider', children="Map this range of values into [red, green]:"),
+                dcc.RangeSlider('colorRangeSlider', min=-15, max=15, value=[-3, 3], pushable=1,
+                                marks={m: str(m) for m in range(-15, 18, 3)})
+            ], className='row rowWithSlider'),
+        ])
+    ]),
+    html.Hr(),
     html.Div(children=[
         dcc.Markdown(children="""
         The **opacity** of the color behind each token means the

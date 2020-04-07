@@ -46,8 +46,7 @@ div.rowWithSlider {
 
 #attentionWeightsDiv {
   border: 1px solid black;
-  width: 100%;
-  min-height: 100px;
+  min-height: 175px;
   margin-top: 15px;
   padding: 10px;
 }
@@ -59,7 +58,7 @@ div.rowWithSlider {
 
 #userText {
   width: 100%;
-  height: 100px;
+  height: 125px;
   padding: 5px;
 }
 #submitButton {
@@ -71,4 +70,9 @@ div.rowWithSlider {
 
 div#inputRow {
   min-height: 120px;
+}
+
+div#visualizeCheckbox label {
+  display: inline;
+  padding: 0 5px;
 }
