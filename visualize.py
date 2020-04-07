@@ -129,21 +129,21 @@ app.layout = html.Div(id='mainContainer', children=[
     html.Div(id='attentionWeightsDiv', children="Processed text will appear here"),
     html.Div(children=[
         dcc.Markdown(children="""
-        **Opacity** of the color behind each token means the
+        The **opacity** of the color behind each token means the
         attention weight associated with it.
 
         **Hue** denotes the value of a feature calculated for that token,
-        **considering its left context**, in red-to-green scale. It might
-        be easily interpretable (e.g. as sentiment), but does not have to be,
+        **considering its left context**, in a red-to-green scale. It might
+        be easily interpretable (e.g. as sentiment) but does not have to be,
         especially if there are more features.
 
         To examine just the attention weights or just the feature values for all
         tokens, uncheck the unnecessary checkbox above.
         
         Some auxiliary tokens were added to denote e.g. capitalization of the 
-        next word ("xxmaj"), beginning of sequence ("xxbos"), words repeated
-        more than 3 times ("xxwrep NUMBER"). Most common ones are not shown
-        by default, but can be restored using the "auxiliary tokens" checkbox.
+        next word ("xxmaj"), beginning of the sequence ("xxbos"), words repeated
+        more than 3 times ("xxwrep NUMBER"). The most common ones are not shown
+        by default but can be restored using the "auxiliary tokens" checkbox.
         
         """, id="instructionManual")
         ], className='row'),
