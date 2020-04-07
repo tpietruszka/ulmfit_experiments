@@ -18,6 +18,7 @@ services:
       - workingbikesbackend_default
     environment:
       - VIS_RUN_ID=imdb_full_agg_1
+      - VIS_DESCRIPTION="Classifying movie reviews as positive or negative"
       - VIS_CPU=True
       - GUNICORN_HOST=0.0.0.0
       - GUNICORN_PORT=80

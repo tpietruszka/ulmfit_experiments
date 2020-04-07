@@ -29,6 +29,7 @@ class AppConfig:
     port: Optional[int]=8050
     ip: str='localhost'
     debug: bool=False
+    description: str=''
 
     @classmethod
     def from_console(cls):
@@ -38,6 +39,7 @@ class AppConfig:
         parser.add_argument('--port', help='Port to run the webserver on')
         parser.add_argument('--ip', help='IP to bind. To make the server available from other hosts use "0.0.0.0" (not recommended)')
         parser.add_argument('--debug', action='store_true', help='Run Dash in debug mode')
+        parser.add_argument('--description', type=str, help="Short model description to display")
         parsed = parser.parse_args()
         return cls(**{k:v for k,v in vars(parsed).items() if v is not None})
 
@@ -62,6 +64,7 @@ def static_file(path):
 featureNumberSlider = dcc.Slider(id='featureNumberSlider', min=0, max=0, step=1,
                                  value=0)
 numFeaturesSpan = html.Span()
+modelDescriptionSpan = html.Span()
 
 app.layout = html.Div(id='mainContainer', children=[
     html.Link(
@@ -69,10 +72,29 @@ app.layout = html.Div(id='mainContainer', children=[
         href='/static/visualize.css'
     ),
     html.H1(children='Attention visualization'),
+    html.Div(id='topDescription', children=[
+        html.H4(children=[modelDescriptionSpan]),
+        html.P('A recurrent neural network processes the text word by word (token by token) to make the '
+               'classification decision. For each word, its importance and contribution towards the final decision '
+               'are calculated. Those values can be inspected below, to better understand the network\'s operation.'
+               ),
+        html.P(['See ',
+                html.A('a more detailed description',
+                       href="https://towardsdatascience.com/explainable-data-efficient-text-classification-888cc7a1af05"
+                            "?source=friends_link&sk=284db458af96fe4f5eee2a0d731384b5'", target='_blank'),
+                ' and ',
+                html.A('source code', href="https://github.com/tpietruszka/ulmfit_experiments", target="_blank"),
+                '.'])
+    ]),
     html.Div(id='inputRow', className='row', children=[
         dcc.Textarea(id='userText', placeholder='Enter some text to analyze',
                      maxLength=max_text_len,
-                     value="Great cast and director set my expectations very high. However, I do not consider it a good movie. It had the potential to be a decent thriller, but it was hampered by only having about twenty minutes worth of good script, which was mostly used up in the beginning. After that holes started to appear in the story that one could drive a truck through. The movie followed a descending curve from good to ordinary to bad to ludicrous by the time it concluded. It's not recommended.",
+                     value="Great cast and director set my expectations very high. However, I do not consider it a "
+                           "good movie. It had the potential to be a decent thriller, but it was hampered by only "
+                           "having about twenty minutes worth of good script, which was mostly used up in the "
+                           "beginning. After that holes started to appear in the story that one could drive a truck "
+                           "through. The movie followed a descending curve from good to ordinary to bad to ludicrous "
+                           "by the time it concluded. It's not recommended.",
                      ),
         html.Button('Evaluate', id='submitButton'),
         ]),
@@ -248,6 +270,7 @@ def setup_app(args: argparse.Namespace):
     featureNumberSlider.max = num_features - 1
     featureNumberSlider.marks = {m: str(m) for m in range(num_features)}
     numFeaturesSpan.children = num_features
+    modelDescriptionSpan.children = args.description
 
     @app.callback(
         [Output('decisionDiv', 'children'),
